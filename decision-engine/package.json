@@ -1,0 +1,21 @@
+{
+  "name": "decision-drift-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Decision candidate extraction and Jira issue matching for Decision Drift Radar.",
+  "main": "src/index.ts",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.ts",
+    "demo": "node scripts/demo.ts",
+    "demo:json": "node scripts/demo.ts --json",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^5.9.3"
+  }
+}
