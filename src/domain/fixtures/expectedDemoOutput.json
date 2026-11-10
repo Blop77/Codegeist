@@ -1,0 +1,347 @@
+{
+  "candidates": [
+    {
+      "id": "dc_f89dbbdfce838159",
+      "kind": "decision",
+      "summary": "Use Stripe Payment Element instead of the legacy card form for checkout.",
+      "evidence": {
+        "quote": "Decision: Use Stripe Payment Element instead of the legacy card form for checkout.",
+        "start": 125,
+        "end": 207
+      },
+      "source": {
+        "id": "page-98301",
+        "type": "confluence_page",
+        "title": "Checkout redesign: decision log",
+        "url": "https://demo-team.atlassian.net/wiki/spaces/PAY/pages/98301",
+        "projectKey": "PAY",
+        "updatedAt": "2026-11-04T16:20:00Z",
+        "author": "Priya (PM)"
+      },
+      "confidence": 0.95,
+      "confidenceReasons": [
+        "Starts with a \"Decision:\" label",
+        "Listed under a decisions heading",
+        "Source title suggests a decision record"
+      ],
+      "affectedIssues": [
+        {
+          "issueKey": "PAY-101",
+          "relevance": 0.65,
+          "reasons": [
+            "Shares terms with the issue: “card”, “form”, “legacy”, “checkout”",
+            "The issue still mentions “legacy card form”, which this decision replaces"
+          ]
+        },
+        {
+          "issueKey": "PAY-104",
+          "relevance": 0.57,
+          "reasons": [
+            "Shares terms with the issue: “Element”, “Stripe”, “Payment”, “checkout”",
+            "The source also mentions PAY-104"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dc_781fe25040a3f182",
+      "kind": "decision",
+      "summary": "Guest checkout is out of scope for v1.",
+      "evidence": {
+        "quote": "Decision: Guest checkout is out of scope for v1.",
+        "start": 210,
+        "end": 258
+      },
+      "source": {
+        "id": "page-98301",
+        "type": "confluence_page",
+        "title": "Checkout redesign: decision log",
+        "url": "https://demo-team.atlassian.net/wiki/spaces/PAY/pages/98301",
+        "projectKey": "PAY",
+        "updatedAt": "2026-11-04T16:20:00Z",
+        "author": "Priya (PM)"
+      },
+      "confidence": 0.95,
+      "confidenceReasons": [
+        "Starts with a \"Decision:\" label",
+        "Listed under a decisions heading",
+        "Source title suggests a decision record"
+      ],
+      "affectedIssues": [
+        {
+          "issueKey": "PAY-102",
+          "relevance": 0.64,
+          "reasons": [
+            "Shares terms with the issue: “Guest”, “checkout”",
+            "The issue still mentions “Guest checkout”, which this decision removes"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dc_a65af8b85e1e42aa",
+      "kind": "decision",
+      "summary": "Move the order confirmation email from SendGrid to Postmark.",
+      "evidence": {
+        "quote": "Agreed: move the order confirmation email from SendGrid to Postmark.",
+        "start": 92,
+        "end": 160
+      },
+      "source": {
+        "id": "page-98422",
+        "type": "confluence_page",
+        "title": "2026-11-06 Payments sync",
+        "url": "https://demo-team.atlassian.net/wiki/spaces/PAY/pages/98422",
+        "projectKey": "PAY",
+        "updatedAt": "2026-11-06T10:05:00Z",
+        "author": "Marcus (EM)"
+      },
+      "confidence": 0.9,
+      "confidenceReasons": [
+        "Starts with an \"Agreed:\" or \"Decided:\" label",
+        "Stated 2 times in this source"
+      ],
+      "affectedIssues": [
+        {
+          "issueKey": "PAY-103",
+          "relevance": 0.8,
+          "reasons": [
+            "Shares terms with the issue: “confirmation”, “SendGrid”, “email”, “Order”",
+            "The issue still mentions “SendGrid”, which this decision replaces"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dc_4ab854392331346b",
+      "kind": "decision",
+      "summary": "Track checkout events with Segment instead of Google Analytics.",
+      "evidence": {
+        "quote": "Decision: track checkout events with Segment instead of Google Analytics.",
+        "start": 36,
+        "end": 109
+      },
+      "source": {
+        "id": "10108",
+        "type": "jira_issue",
+        "title": "PAY-108 Checkout analytics events",
+        "url": "https://demo-team.atlassian.net/browse/PAY-108",
+        "projectKey": "PAY",
+        "updatedAt": "2026-11-05T12:00:00Z"
+      },
+      "confidence": 0.85,
+      "confidenceReasons": [
+        "Starts with a \"Decision:\" label"
+      ],
+      "affectedIssues": [
+        {
+          "issueKey": "PAY-108",
+          "relevance": 0.88,
+          "reasons": [
+            "The decision is written in PAY-108 itself",
+            "Shares terms with the issue: “events”, “analytics”, “Checkout”"
+          ]
+        },
+        {
+          "issueKey": "PAY-109",
+          "relevance": 0.53,
+          "reasons": [
+            "Shares terms with the issue: “Google”, “Analytics”, “Checkout”",
+            "The issue still mentions “Google Analytics”, which this decision replaces"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dc_0b61aad354febbf9",
+      "kind": "decision",
+      "summary": "We will cap retries at 3 instead of 5.",
+      "evidence": {
+        "quote": "Decided in standup: we will cap retries at 3 instead of 5.",
+        "start": 0,
+        "end": 58
+      },
+      "source": {
+        "id": "comment-20001",
+        "type": "jira_comment",
+        "title": "Comment on PAY-107",
+        "url": "https://demo-team.atlassian.net/browse/PAY-107?focusedCommentId=20001",
+        "projectKey": "PAY",
+        "updatedAt": "2026-11-07T15:30:00Z",
+        "author": "Tom (Eng)"
+      },
+      "confidence": 0.85,
+      "confidenceReasons": [
+        "Starts with an \"Agreed:\" or \"Decided:\" label"
+      ],
+      "affectedIssues": [
+        {
+          "issueKey": "PAY-107",
+          "relevance": 0.75,
+          "reasons": [
+            "The decision is in a comment on PAY-107",
+            "The issue still mentions “5”, which this decision replaces"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dc_567b647a91f94894",
+      "kind": "decision",
+      "summary": "PAY-106 ships in the 2.3 release.",
+      "evidence": {
+        "quote": "Decision: PAY-106 ships in the 2.3 release.",
+        "start": 0,
+        "end": 43
+      },
+      "source": {
+        "id": "page-98510",
+        "type": "confluence_page",
+        "title": "Release 2.3 plan",
+        "url": "https://demo-team.atlassian.net/wiki/spaces/PAY/pages/98510",
+        "projectKey": "PAY",
+        "updatedAt": "2026-11-08T09:00:00Z"
+      },
+      "confidence": 0.85,
+      "confidenceReasons": [
+        "Starts with a \"Decision:\" label"
+      ],
+      "affectedIssues": [
+        {
+          "issueKey": "PAY-106",
+          "relevance": 0.6,
+          "reasons": [
+            "The quoted text names PAY-106"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dc_779270af9a158a69",
+      "kind": "decision",
+      "summary": "We decided to rotate staging certificates monthly.",
+      "evidence": {
+        "quote": "We decided to rotate staging certificates monthly.",
+        "start": 0,
+        "end": 50
+      },
+      "source": {
+        "id": "page-77001",
+        "type": "confluence_page",
+        "title": "Ops weekly",
+        "url": "https://demo-team.atlassian.net/wiki/spaces/OPS/pages/77001",
+        "projectKey": "OPS",
+        "updatedAt": "2026-11-02T11:00:00Z"
+      },
+      "confidence": 0.8,
+      "confidenceReasons": [
+        "Says the team decided or agreed"
+      ],
+      "affectedIssues": [
+        {
+          "issueKey": "OPS-9",
+          "relevance": 0.51,
+          "reasons": [
+            "Shares terms with the issue: “certificates”, “Rotate”, “staging”"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dc_66df77dcd4c8d44a",
+      "kind": "decision",
+      "summary": "OPS-9 certificate rotation is handled by the platform team.",
+      "evidence": {
+        "quote": "Decision: OPS-9 certificate rotation is handled by the platform team.",
+        "start": 44,
+        "end": 113
+      },
+      "source": {
+        "id": "page-98510",
+        "type": "confluence_page",
+        "title": "Release 2.3 plan",
+        "url": "https://demo-team.atlassian.net/wiki/spaces/PAY/pages/98510",
+        "projectKey": "PAY",
+        "updatedAt": "2026-11-08T09:00:00Z"
+      },
+      "confidence": 0.85,
+      "confidenceReasons": [
+        "Starts with a \"Decision:\" label"
+      ],
+      "affectedIssues": []
+    },
+    {
+      "id": "dc_1617e6582662ae42",
+      "kind": "open_question",
+      "summary": "Do we support Apple Pay at launch?",
+      "evidence": {
+        "quote": "Open question: Do we support Apple Pay at launch?",
+        "start": 261,
+        "end": 310
+      },
+      "source": {
+        "id": "page-98301",
+        "type": "confluence_page",
+        "title": "Checkout redesign: decision log",
+        "url": "https://demo-team.atlassian.net/wiki/spaces/PAY/pages/98301",
+        "projectKey": "PAY",
+        "updatedAt": "2026-11-04T16:20:00Z",
+        "author": "Priya (PM)"
+      },
+      "confidence": 0.8,
+      "confidenceReasons": [
+        "Starts with an \"Open question:\" label"
+      ],
+      "affectedIssues": []
+    },
+    {
+      "id": "dc_d14349d2df0c0690",
+      "kind": "open_question",
+      "summary": "We have not decided whether refunds need a second approver.",
+      "evidence": {
+        "quote": "We have not decided whether refunds need a second approver.",
+        "start": 183,
+        "end": 242
+      },
+      "source": {
+        "id": "page-98422",
+        "type": "confluence_page",
+        "title": "2026-11-06 Payments sync",
+        "url": "https://demo-team.atlassian.net/wiki/spaces/PAY/pages/98422",
+        "projectKey": "PAY",
+        "updatedAt": "2026-11-06T10:05:00Z",
+        "author": "Marcus (EM)"
+      },
+      "confidence": 0.7,
+      "confidenceReasons": [
+        "Says the decision is still open"
+      ],
+      "affectedIssues": []
+    },
+    {
+      "id": "dc_a99bd5e8772aee4e",
+      "kind": "proposal",
+      "summary": "We should probably add rate limiting to the payments API before launch.",
+      "evidence": {
+        "quote": "We should probably add rate limiting to the payments API before launch.",
+        "start": 412,
+        "end": 483
+      },
+      "source": {
+        "id": "page-98301",
+        "type": "confluence_page",
+        "title": "Checkout redesign: decision log",
+        "url": "https://demo-team.atlassian.net/wiki/spaces/PAY/pages/98301",
+        "projectKey": "PAY",
+        "updatedAt": "2026-11-04T16:20:00Z",
+        "author": "Priya (PM)"
+      },
+      "confidence": 0.6,
+      "confidenceReasons": [
+        "Uses proposal wording such as \"we should\" or \"probably\""
+      ],
+      "affectedIssues": []
+    }
+  ],
+  "warnings": []
+}
