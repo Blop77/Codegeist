@@ -11,7 +11,15 @@ How the hackathon demo is set up, how to run it, and what it does and does not s
 | Other site | `decitrace.atlassian.net` is still on major version 2. Forge classifies it as a production site, so it is deliberately not upgraded with development builds. |
 | Deployed code | Development version **3.5.0**, deployed from commit `60cbb45` and verified live on project `MC`: one decision, no disclaimer finding, MC-9 flagged as drift, the four listed issues matched, and issue, source and Confluence page links all open on the site. |
 
-Redeploy after code changes with `forge deploy --environment development`. The current scopes cover every feature, so redeploys do not need an installation upgrade.
+| Not yet deployed | The note action and project picker add the `write:jira-work` scope, which makes the next deploy a new **major version (4)**. Until the demo-site installation is upgraded it keeps running 3.5.0, without those features. |
+
+To roll out a scope change:
+
+1. `forge deploy --environment development`
+2. `forge install --upgrade --site one-atlas-pxox.atlassian.net --product Jira --environment development`, and approve the new scope.
+3. `forge install list` should show version 4, up to date.
+
+Redeploys without scope changes need no installation upgrade.
 
 ## Run the demo
 
@@ -27,7 +35,10 @@ Redeploy after code changes with `forge deploy --environment development`. The c
    - The issue still mentions "separate channel plans", which this decision replaces
 6. MC-10 (0.71, also shares terms), MC-1 and MC-5 (0.50) follow, each because "the same paragraph as the decision lists" it.
 7. Click the source link or an issue key to open the page or issue on the site.
-8. Select **Mark relevant**, then open MC-9. The issue panel shows the same decision, the "still mentions" reason and the saved review. **Undo review** clears it on both screens.
+8. Select **Mark relevant**. Under MC-9, select **Add note to MC-9**, edit the suggested note if you want, then **Post comment to MC-9**. The card shows "Note added to MC-9" with a **View comment** link; the comment on MC-9 carries the note, the quote and a link to the Confluence page, in your name.
+9. Open MC-9. The issue panel shows the same decision, the "still mentions" reason, the saved review and the posted note. Rescanning still shows one decision: the app's own comment is not read as a new one, and the note cannot be posted twice.
+
+Steps 8 and 9 need the version with the note action (see Status). You can also open the app from the MC project's own page, where it scans MC without choosing a project.
 
 The page's disclaimer sentence ("This is a sample decision, not an approved Marketing team decision.") is deliberately not a finding. Versions before 3.3.0 listed it as a second decision, and matched MC-9, MC-7 and MC-42 instead of the four listed issues; versions before 3.5.0 had broken Jira and Confluence links.
 

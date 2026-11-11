@@ -8,7 +8,7 @@ import ForgeReconciler, {
   useProductContext
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
-import { CandidateCard } from './candidate-card';
+import { CandidateCard, notePayload, withNote } from './candidate-card';
 
 function IssuePanel() {
   const context = useProductContext();
@@ -63,6 +63,16 @@ function IssuePanel() {
     }
   };
 
+  const applyNote = async (candidate, noteIssueKey, note) => {
+    try {
+      const response = await invoke('applyDecisionNote', notePayload(candidate, context?.siteUrl, noteIssueKey, note));
+      if (response?.ok) setResult((current) => withNote(current, candidate.id, noteIssueKey, response.note));
+      return response;
+    } catch {
+      return { ok: false, error: 'Could not add the note. Check the comments on this issue before trying again.' };
+    }
+  };
+
   return (
     <Stack space="space.200">
       <Heading size="medium">Decision Drift Radar</Heading>
@@ -84,6 +94,7 @@ function IssuePanel() {
           hideIssueKeys
           onReview={(choice) => reviewCandidate(candidate, choice)}
           reviewBusy={reviewBusyId === candidate.id}
+          onApplyNote={(noteIssueKey, note) => applyNote(candidate, noteIssueKey, note)}
         />
       )) : result ? (
         <SectionMessage appearance="information" title="No linked decisions found">
