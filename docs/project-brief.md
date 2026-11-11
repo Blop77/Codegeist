@@ -1,3 +1,5 @@
+> Historical planning brief: this is the original brief from the start of the hackathon, kept for history. README.md and docs/demo.md describe the app as built.
+
 # Decision Drift Radar
 
 ## One-line pitch
@@ -55,36 +57,6 @@ For a Jira project or issue, show the important decisions that may affect it, wh
 
 ## Initial prioritization logic
 Rank candidates using transparent signals: explicit decision language, recency, source authority, overlap with issue/project terms, and whether the affected issue is active or blocked. Show the signals to the reviewer; do not present a score as certainty.
-
-## Work split
-### You: product owner and integrator
-- Confirm the target persona and the exact first-demo scenario.
-- Own shared repo, Forge app creation/configuration, environment variables, and final merge.
-- Build the end-to-end demo path and keep the product scope coherent.
-- Review Claude's branch before integration; resolve conflicts and verify install/deploy permissions.
-- Decide which stretch goals survive after the core journey works.
-
-### Claude: isolated discovery/extraction workstream
-Give Claude a bounded task with a separate branch or isolated files:
-- Research and implement the decision-candidate extraction/matching module behind a typed interface.
-- Input: normalized Jira issue and Confluence/Jira discussion records; output: candidate decisions, evidence spans, affected issue keys, and explainable match reasons.
-- Include deterministic rules and a mock fixture set first; make any LLM provider optional and injectable.
-- Do not edit Forge manifest, app shell, shared routing, or storage schema without an agreed interface change.
-- Deliver: branch/patch, interface/schema, fixture examples, known limitations, and how to run it.
-
-### Me (Codex): Forge foundation and product integration
-- Establish the Forge app structure and manifest/modules.
-- Implement Jira UI shell, resolver boundary, permission-aware Atlassian data adapters, candidate/review storage, and the human-approved Jira note action.
-- Integrate Claude's module once its input/output contract is stable.
-- Keep an integration checklist and a coherent demo storyline.
-
-## Shared contracts to agree before parallel coding
-1. Runtime and UI framework selected from the current Forge template.
-2. Normalized source record schema: Jira issue, comment, Confluence page, and page excerpt.
-3. Candidate schema and confidence semantics.
-4. Persistence ownership and migration/versioning approach.
-5. Action semantics: exact Jira field/comment change, permission check, retry/idempotency key, and audit record.
-6. Branch/patch delivery and naming conventions.
 
 ## Definition of done for the demo
 A judge can install/open the app, select a project, see at least one decision with a direct source citation, understand why a Jira issue is affected, review/edit the proposed note, apply it with one explicit confirmation, and see the resulting Jira update and audit state. A failed permission/API call produces a useful message and does not create partial or duplicate changes.
