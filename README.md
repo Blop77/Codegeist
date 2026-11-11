@@ -35,6 +35,7 @@ See [Atlassian's Jira Forge tutorial](https://developer.atlassian.com/platform/f
 - [Testing instructions](docs/testing-instructions.md): install the app on your own site and try it, with or without your own data
 - [Demo notes](docs/demo.md): current deployment and install status, scan steps, and sample-data limits
 - [Product brief](docs/project-brief.md)
+- [Privacy policy](docs/privacy.md) and [terms of service](docs/terms.md)
 - [Integration boundary](docs/integration-contract.md)
 
 ## Product principles
