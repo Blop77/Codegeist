@@ -6,7 +6,7 @@ Decision Drift Radar helps software teams catch decisions recorded in Confluence
 
 ## Current implementation
 
-- Jira global page with a project-key scan (defaults to `KAN`).
+- Jira global page with a project-key scan.
 - Read-only Jira issue lookup using the signed-in user's access.
 - Scoped Confluence page search for pages mentioning the project key.
 - Decision extraction (`src/domain/`) over issue descriptions, issue comments and those Confluence pages: decisions, open questions and proposals, each with a quote, source link, wording signals, and the reasons it may affect a Jira issue.
@@ -31,6 +31,7 @@ See [Atlassian's Jira Forge tutorial](https://developer.atlassian.com/platform/f
 
 ## Project docs
 
+- [Demo notes](docs/demo.md): current deployment and install status, scan steps, and sample-data limits
 - [Product brief](docs/project-brief.md)
 - [Integration boundary](docs/integration-contract.md)
 
@@ -38,5 +39,5 @@ See [Atlassian's Jira Forge tutorial](https://developer.atlassian.com/platform/f
 
 - Show source evidence and links behind every surfaced decision.
 - Explain why a Jira issue may be affected.
-- Require teammate review before changing Jira.
+- Keep Jira read-only; teammates record a review instead of the app changing issues.
 - Store app review state, not copies of full source documents.

@@ -8,6 +8,7 @@ import type { ExtractionInput, ExtractionResult, SentenceClassifier } from '../d
 import { defaultClassifier, extractDecisions, MAX_QUOTE_LENGTH } from '../extractDecisions';
 import { demoInput } from './demoInput';
 import { emptyInput, longSentence, malformedInput } from './edgeCases';
+import { mcDemoInput } from './mcDemoInput';
 
 const GOLDEN = 'src/domain/fixtures/expectedDemoOutput.json';
 let failures = 0;
@@ -199,6 +200,60 @@ check('a throwing classifier skips sentences instead of failing', () => {
     },
   });
   assert.deepEqual(r.candidates, []);
+});
+
+const kindOf = (sentence: string) =>
+  defaultClassifier(sentence, { sourceType: 'confluence_page', sourceTitle: 'Notes', underDecisionHeading: false })?.kind ?? null;
+
+check('disclaimers and negated approvals are not decisions', () => {
+  for (const sentence of [
+    'This is a sample decision, not an approved Marketing team decision.',
+    'This is not a final decision.',
+    'This is not a decision, just a summary of options.',
+    'It was only an example decision for training.',
+    'The pricing table is for illustration only.',
+    'The budget was not yet approved.',
+    'Nothing has been approved yet.',
+    'No one has signed off on the rollout.',
+    'Approved requests go to the MC intake queue.',
+    'See the list of approved vendors in the wiki.',
+  ]) {
+    assert.equal(kindOf(sentence), null, sentence);
+  }
+  assert.equal(kindOf('We never decided to drop the legacy API.'), 'open_question');
+});
+
+check('real approvals and decisions still count', () => {
+  for (const sentence of [
+    'Decision: We agreed to coordinate the MC website, email, and social campaign under one launch plan.',
+    'The vendor contract was approved by legal.',
+    'Leadership signed off on the Q3 launch date.',
+    'Not only was it approved, it shipped early.',
+    'The CFO approved the Q4 budget.',
+    'Approved: launch the campaign on November 20.',
+    'Budget approved.',
+    'Final decision: ship the sample data importer in 2.4.',
+    'Decision: Use sample data for the staging environment.',
+  ]) {
+    assert.equal(kindOf(sentence), 'decision', sentence);
+  }
+});
+
+check('MC demo page: one decision, no disclaimer, listed issues matched', () => {
+  const r = extractDecisions(mcDemoInput);
+  assertEvidenceExact(mcDemoInput, r);
+  assert.equal(r.candidates.length, 1, r.candidates.map((c) => c.summary).join(' | '));
+  const [c] = r.candidates;
+  assert.equal(c.kind, 'decision');
+  assert.equal(c.evidence.quote, 'Decision: We agreed to coordinate the MC website, email, and social campaign under one launch plan.');
+  assert.ok(!r.candidates.some((x) => /sample decision|not an approved/i.test(x.evidence.quote)));
+  const keys = c.affectedIssues.map((a) => a.issueKey);
+  for (const key of ['MC-1', 'MC-5', 'MC-9', 'MC-10']) {
+    assert.ok(keys.includes(key), `${key} is matched`);
+    const a = c.affectedIssues.find((x) => x.issueKey === key);
+    assert.ok(a?.reasons.includes(`The same paragraph as the decision lists ${key}`), `${key} explains the listing`);
+  }
+  assert.deepEqual(keys.slice(0, 4).sort(), ['MC-1', 'MC-10', 'MC-5', 'MC-9'], 'listed issues rank first');
 });
 
 if (failures > 0) {

@@ -25,15 +25,34 @@ const SELF_REFERENCE = [
   /\bwhat (?:the team|we|everyone|the group) (?:decided|agreed)\b/i,
 ];
 
+/**
+ * Disclaimers that say a passage is not a real decision ("This is a sample decision, not an
+ * approved team decision", "not a final decision", "for illustration only"). Skipped entirely,
+ * so they never surface as decisions, proposals or open questions.
+ */
+const DISCLAIMER = [
+  /\b(?:not|never|isn't|is not|wasn't|was not)\s+(?:yet\s+)?(?:an?\s+|the\s+)?(?:actual|real|official|approved|final|binding|formal|confirmed|agreed)\b[^.!?]{0,40}?\bdecisions?\b/i,
+  /\b(?:not|isn't|is not|wasn't|was not)\s+(?:an?\s+|the\s+)?decision\b/i,
+  /\b(?:this|it)\s+(?:is|was)\s+(?:only\s+|just\s+|purely\s+)?(?:an?\s+)?(?:sample|example|demo|dummy|placeholder|hypothetical|fictional|illustrative)\s+(?:\w+\s+){0,2}?(?:decision|data|page|content|entry|record|text)\b/i,
+  /\bfor\s+(?:illustration|demonstration|testing)\s+(?:purposes\s+)?only\b/i,
+];
+
 const OPEN_LABEL = /^\s*(?:open (?:decision|question)|undecided|tbd)\s*[:\-–]/i;
 
 const UNRESOLVED = [
-  /\b(?:not|haven't|have not|hasn't|has not|didn't|did not|yet to|no)\s+(?:been\s+|yet\s+)?(?:decided|agreed|decision|reached a decision)\b/i,
+  /\b(?:not|never|haven't|have not|hasn't|has not|didn't|did not|yet to|no)\s+(?:been\s+|yet\s+)?(?:decided|agreed|decision|reached a decision)\b/i,
   /\b(?:open question|tbd|to be (?:decided|determined|confirmed)|undecided|needs? to decide|pending (?:a )?decision|still deciding|not sure yet)\b/i,
 ];
 
 const NEGATED_APPROVAL =
-  /\b(?:not|never|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't)\s+(?:(?:an?|been|yet|currently)\s+){0,2}(?:approved|signed off)\b/i;
+  /\b(?:(?:not|never|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't)\s+(?:(?:an?|been|yet|currently)\s+){0,2}|(?:nothing|no one|nobody|none)\s+(?:(?:has|have|had|was|were|is|been|yet)\s+){0,3})(?:approved|signed off)\b/i;
+
+/**
+ * "approved" used as a verb or label ("was approved by legal", "leadership approved the plan",
+ * "Approved: …", "Budget approved."), not as an adjective ("Approved requests go to the queue").
+ */
+const APPROVAL =
+  /\b(?:(?:is|was|were|are|been|be|being|got|gets|get|it|they|we|team|leadership|stakeholders|legal|management)\s+approved\b|approved\s+(?:by|the|this|that|these|those|it|them|our|their|a|an|on|for)\b|signed off\b)|^\s*approved\s*[:\-–]|\bapproved\s*[.!]*\s*$/i;
 
 const EXPLICIT: Array<{ re: RegExp; confidence: number; reason: string; unless?: RegExp }> = [
   { re: /^\s*(?:final\s+)?decision\s*[:\-–]/i, confidence: 0.85, reason: 'Starts with a "Decision:" label' },
@@ -46,7 +65,7 @@ const EXPLICIT: Array<{ re: RegExp; confidence: number; reason: string; unless?:
   { re: /\b(?:decided|agreed)\s+(?:to|that|on)\b/i, confidence: 0.8, reason: 'Says something was decided or agreed' },
   { re: /\bfinal (?:call|decision)\b/i, confidence: 0.8, reason: 'Calls it a final decision' },
   { re: /\b(?:we(?:'ll| will| are|'re))\s+(?:going\s+(?:with|to go with)|go(?:ing)? with)\b/i, confidence: 0.65, reason: 'States what the team is going with' },
-  { re: /\b(?:approved|signed off)\b/i, confidence: 0.6, reason: 'Mentions an approval', unless: NEGATED_APPROVAL },
+  { re: APPROVAL, confidence: 0.6, reason: 'Mentions an approval', unless: NEGATED_APPROVAL },
   { re: /\bgoing forward\b/i, confidence: 0.6, reason: 'States a rule going forward' },
 ];
 
@@ -58,6 +77,7 @@ const DECISION_QUESTION = /\b(?:should we|do we|are we|can we|will we|which|whet
 /** The built-in rules. Exported so a custom classifier can fall back to them. */
 export const defaultClassifier: SentenceClassifier = (sentence, ctx) => {
   if (SELF_REFERENCE.some((re) => re.test(sentence))) return null;
+  if (DISCLAIMER.some((re) => re.test(sentence))) return null;
   const isQuestion = sentence.trim().endsWith('?');
 
   if (OPEN_LABEL.test(sentence)) return { kind: 'open_question', confidence: 0.8, reasons: ['Starts with an "Open question:" label'] };
@@ -362,6 +382,13 @@ function extractFromSource(source: SourceRecord, classify: SentenceClassifier): 
 
 const KIND_ORDER: Record<DecisionKind, number> = { decision: 0, open_question: 1, proposal: 2 };
 
+/** The text line (paragraph or list item) that holds the span. */
+function paragraphAround(text: string, start: number, end: number): string {
+  const from = text.lastIndexOf('\n', start - 1) + 1;
+  const to = text.indexOf('\n', end);
+  return text.slice(from, to === -1 ? text.length : to);
+}
+
 function timeValue(ts: string): number {
   return isValidTimestamp(ts) ? Date.parse(ts) : Number.NEGATIVE_INFINITY;
 }
@@ -427,7 +454,10 @@ export function extractDecisions(input: ExtractionInput, options: ExtractionOpti
         },
         confidence: round2(Math.min(MAX_CONFIDENCE, confidence)),
         confidenceReasons: reasons,
-        affectedIssues: matchIssues({ summary: draft.summary, quote: draft.span.text, source }, index),
+        affectedIssues: matchIssues(
+          { summary: draft.summary, quote: draft.span.text, source, paragraph: paragraphAround(source.text, draft.span.start, draft.span.end) },
+          index,
+        ),
       };
       candidates.push(candidate);
     }

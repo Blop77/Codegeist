@@ -15,7 +15,7 @@ import { invoke } from '@forge/bridge';
 import { CandidateCard, KIND_GROUPS } from './candidate-card';
 
 function App() {
-  const [projectKey, setProjectKey] = useState('KAN');
+  const [projectKey, setProjectKey] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reviewBusyId, setReviewBusyId] = useState(null);
@@ -66,8 +66,9 @@ function App() {
         <Text>Find decisions that may not have made it into the work they affect.</Text>
       </Stack>
 
-      <SectionMessage appearance="information" title="Evidence first">
-        Every surfaced decision will link back to its source. Jira changes will require teammate review.
+      <SectionMessage appearance="information" title="Evidence first, read-only">
+        Every finding quotes and links its source and explains why an issue may be affected. The app never changes
+        Jira issues; teammates record a review instead.
       </SectionMessage>
 
       <Inline space="space.150" alignBlock="end">
@@ -78,10 +79,10 @@ function App() {
             name="projectKey"
             value={projectKey}
             onChange={(event) => setProjectKey(event.target.value)}
-            placeholder="KAN"
+            placeholder="For example, MC"
           />
         </Stack>
-        <Button appearance="primary" onClick={scan} isDisabled={loading}>
+        <Button appearance="primary" onClick={scan} isDisabled={loading || !projectKey.trim()}>
           {loading ? 'Scanning…' : 'Scan project'}
         </Button>
       </Inline>
@@ -92,19 +93,16 @@ function App() {
 
       {result?.ok && (
         <Stack space="space.200">
-          <Heading size="medium">{result.projectKey} · {result.issues.length} recent issues</Heading>
-          {result.issues.length === 0
-            ? <Text>No issues found for this project.</Text>
-            : result.issues.map((issue) => (
-              <Stack key={issue.key} space="space.050">
-                <Inline space="space.100" alignBlock="center">
-                  <Text>{issue.key}</Text>
-                  <Text>{issue.status}</Text>
-                </Inline>
-                <Text>{issue.summary}</Text>
-                {issue.labels.length > 0 && <Text>Labels: {issue.labels.join(', ')}</Text>}
-              </Stack>
-            ))}
+          <Text>
+            Scanned {result.issues.length} recent {result.projectKey} issues and {result.pages?.length ?? 0} Confluence
+            {result.pages?.length === 1 ? ' page' : ' pages'} mentioning {result.projectKey}.
+          </Text>
+          {result.issues.length === 0 && (
+            <SectionMessage appearance="warning" title={`No issues found in ${result.projectKey}`}>
+              Check the project key, or pick a project with issues. Findings can still come from Confluence pages, but no
+              issue can be matched to them.
+            </SectionMessage>
+          )}
           {result.notice && <SectionMessage appearance="information">{result.notice}</SectionMessage>}
           {result.reviewWarning && <SectionMessage appearance="warning" title="Review history unavailable">{result.reviewWarning}</SectionMessage>}
           {(result.candidates ?? []).length === 0 ? (
@@ -148,13 +146,23 @@ function App() {
               The scan currently looks for pages mentioning this project key. Add the key to a decision page to include it in this first pass.
             </SectionMessage>
           )}
+          {result.issues.length > 0 && (
+            <Stack space="space.100">
+              <Heading size="medium">Recent {result.projectKey} issues scanned · {result.issues.length}</Heading>
+              {result.issues.map((issue) => (
+                <Text key={issue.key}>
+                  {issue.url ? <Link href={issue.url}>{issue.key}</Link> : issue.key}
+                  {` · ${issue.status} · ${issue.summary}`}
+                  {issue.labels.length > 0 ? ` · Labels: ${issue.labels.join(', ')}` : ''}
+                </Text>
+              ))}
+            </Stack>
+          )}
           <SectionMessage appearance="information" title="How matching works">
-            Each result quotes its source and lists the signals behind it: decision wording, issue keys, shared terms, and
-            issues that still mention what a decision replaces. Signals are heuristics, not certainty. Review every
-            suggested link before acting; the app makes no Jira changes.
-          </SectionMessage>
-          <SectionMessage appearance="information" title="Review decisions">
-            Mark a finding relevant or dismiss it to save the team's review for this Jira project. This records review only; it does not change Jira issues.
+            Each finding quotes its source and lists the signals behind it: decision wording, issue keys named in the
+            quote or its paragraph, shared terms, and issues that still mention what a decision replaces. Signals are
+            heuristics, not certainty. Mark a finding relevant or dismiss it to save the team's review for this project;
+            reviews never change Jira issues.
           </SectionMessage>
         </Stack>
       )}
