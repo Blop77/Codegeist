@@ -23,6 +23,7 @@ Decision Drift Radar helps software teams catch decisions recorded in Confluence
 4. Install on a Jira site with `forge install --site <site>.atlassian.net --product Jira --environment development`.
 5. Grant the Jira, Confluence, and Forge storage scopes when prompted. Confluence pages are optional; Jira descriptions and comments are scanned even when Confluence is unavailable.
 6. If the app was already installed, upgrade the installation after deploying the storage scope so Jira can grant it.
+7. To enable Confluence page discovery, install the optional Confluence app on the same demo site: run `forge install --demo-site --environment development` again and select Confluence.
 
 Run the domain fixture checks with `npx --yes tsx src/domain/fixtures/checkFixtures.ts`.
 
