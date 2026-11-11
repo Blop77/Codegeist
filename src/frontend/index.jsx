@@ -41,6 +41,26 @@ function App() {
     }
   };
 
+  // Runs the same analysis on a small bundled project. Touches nothing on the site.
+  const scanSample = async () => {
+    setLoading(true);
+    setResult(null);
+    setReviewError(null);
+    try {
+      setResult(await invoke('getSampleRadar'));
+    } catch {
+      setResult({ ok: false, error: 'The sample scan failed. Refresh the page and try again.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sampleButton = (
+    <Button appearance="default" onClick={scanSample} isDisabled={loading}>
+      Try with sample data
+    </Button>
+  );
+
   // On a project page, scan that project straight away.
   useEffect(() => {
     if (!contextProjectKey) return;
@@ -114,6 +134,7 @@ function App() {
           <Button appearance="default" onClick={() => scan(contextProjectKey)} isDisabled={loading}>
             {loading ? 'Scanning…' : 'Scan again'}
           </Button>
+          {sampleButton}
         </Inline>
       ) : (
         <Inline space="space.150" alignBlock="end">
@@ -144,18 +165,26 @@ function App() {
           <Button appearance="primary" onClick={() => scan()} isDisabled={loading || !projectKey.trim()}>
             {loading ? 'Scanning…' : 'Scan project'}
           </Button>
+          {sampleButton}
         </Inline>
       )}
 
-      {loading && <Inline space="space.100"><Spinner /><Text>Loading Jira work…</Text></Inline>}
+      {loading && <Inline space="space.100"><Spinner /><Text>Scanning…</Text></Inline>}
       {result && !result.ok && <SectionMessage appearance="error" title="Could not scan project">{result.error}</SectionMessage>}
       {reviewError && <SectionMessage appearance="error" title="Review not saved">{reviewError}</SectionMessage>}
 
       {result?.ok && (
         <Stack space="space.200">
+          {result.sample && (
+            <SectionMessage appearance="discovery" title="Sample data: a fictional payments team">
+              These findings come from a small project bundled with the app, not from your site. They show what a scan
+              looks like when decisions in Confluence pages and Jira comments have not reached the issues they affect.
+              Nothing was read from or written to your site. Choose a project above to scan your own work.
+            </SectionMessage>
+          )}
           <Text>
-            Scanned {result.issues.length} recent {result.projectKey} issues and {result.pages?.length ?? 0} Confluence
-            {result.pages?.length === 1 ? ' page' : ' pages'} mentioning {result.projectKey}.
+            Scanned {result.issues.length} {result.sample ? 'sample' : `recent ${result.projectKey}`} issues and {result.pages?.length ?? 0}
+            {result.sample ? ' sample' : ''} Confluence{result.pages?.length === 1 ? ' page' : ' pages'}{result.sample ? '.' : ` mentioning ${result.projectKey}.`}
           </Text>
           {result.issues.length === 0 && (
             <SectionMessage appearance="warning" title={`No issues found in ${result.projectKey}`}>
@@ -168,7 +197,8 @@ function App() {
           {(result.candidates ?? []).length === 0 ? (
             <SectionMessage appearance="information" title="No decisions detected">
               The scan reads issue descriptions, comments and Confluence pages mentioning {result.projectKey}, looking for
-              wording such as “Decision:”, “we agreed”, “we decided to”, “open question” or “we should”.
+              wording such as “Decision:”, “we agreed”, “we decided to”, “open question” or “we should”. To see what
+              findings look like, select Try with sample data.
             </SectionMessage>
           ) : KIND_GROUPS.map(({ kind, title }) => {
             const group = result.candidates.filter((candidate) => candidate.kind === kind);
@@ -182,9 +212,10 @@ function App() {
                     candidate={candidate}
                     siteUrl={siteUrl}
                     issueUrls={issueUrls}
-                    onReview={(choice) => reviewCandidate(candidate, choice)}
+                    sample={Boolean(result.sample)}
+                    onReview={result.sample ? undefined : (choice) => reviewCandidate(candidate, choice)}
                     reviewBusy={reviewBusyId === candidate.id}
-                    onApplyNote={(issueKey, note) => applyNote(candidate, issueKey, note)}
+                    onApplyNote={result.sample ? undefined : (issueKey, note) => applyNote(candidate, issueKey, note)}
                   />
                 ))}
               </Stack>
@@ -196,7 +227,7 @@ function App() {
             </SectionMessage>
           ) : result.pages?.length > 0 ? (
             <Stack space="space.100">
-              <Heading size="medium">Confluence pages mentioning {result.projectKey}</Heading>
+              <Heading size="medium">{result.sample ? 'Sample Confluence pages' : `Confluence pages mentioning ${result.projectKey}`}</Heading>
               {result.pages.map((source) => {
                 const href = siteLink(siteUrl, source.url);
                 return href
@@ -211,7 +242,7 @@ function App() {
           )}
           {result.issues.length > 0 && (
             <Stack space="space.100">
-              <Heading size="medium">Recent {result.projectKey} issues scanned · {result.issues.length}</Heading>
+              <Heading size="medium">{result.sample ? 'Sample issues scanned' : `Recent ${result.projectKey} issues scanned`} · {result.issues.length}</Heading>
               {result.issues.map((issue) => (
                 <Text key={issue.key}>
                   {siteLink(siteUrl, issue.url) ? <Link href={siteLink(siteUrl, issue.url)}>{issue.key}</Link> : issue.key}

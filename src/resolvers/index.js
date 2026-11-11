@@ -2,6 +2,7 @@ import Resolver from '@forge/resolver';
 import api, { route, startsWith, storage } from '@forge/api';
 import { extractDecisions } from '../domain/extractDecisions';
 import { issueSources, noteCommentBody, pageSource, toIssueRecord, toIssueSummary } from './normalize';
+import { SAMPLE_PROJECT_KEY, sampleIssues, sampleSources } from './sample-data';
 
 const resolver = new Resolver();
 
@@ -308,6 +309,32 @@ resolver.define('applyDecisionNote', async ({ payload, context }) => {
     console.error('Decision Drift Radar note failed', error);
     return { ok: false, error: 'Could not add the note. Check the issue before trying again, in case the comment was posted.' };
   }
+});
+
+/**
+ * The same analysis over a small bundled project, for sites with no decision pages yet.
+ * Reads and writes nothing on the site; findings cannot be reviewed or posted.
+ */
+resolver.define('getSampleRadar', async () => {
+  const { candidates, notice } = analyze(sampleSources, sampleIssues);
+  return {
+    ok: true,
+    sample: true,
+    projectKey: SAMPLE_PROJECT_KEY,
+    issues: sampleIssues.map((issue) => ({
+      key: issue.key,
+      summary: issue.title,
+      status: issue.status,
+      labels: issue.labels,
+      url: null,
+      updated: issue.updatedAt
+    })),
+    pages: sampleSources.filter((source) => source.type === 'confluence_page').map(({ id, title }) => ({ id, title, url: '' })),
+    candidates: candidates.map((candidate) => ({ ...candidate, source: { ...candidate.source, url: '' }, review: null, notes: {} })),
+    notice,
+    reviewWarning: null,
+    warnings: []
+  };
 });
 
 /** Projects the signed-in user can see, for the project picker. */

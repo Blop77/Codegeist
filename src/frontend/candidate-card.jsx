@@ -146,9 +146,10 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote }) {
  * One extracted candidate with its evidence and the reasons behind every match.
  * `issueUrls` maps issue keys to links; `hideIssueKeys` skips the key on the issue panel.
  * `onApplyNote(issueKey, note)` posts a reviewed note; it is offered only once the finding
- * is marked relevant.
+ * is marked relevant. `sample` marks a finding from the bundled sample project: it has no
+ * links on this site and cannot be reviewed.
  */
-export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false, onApplyNote }) {
+export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false, onApplyNote, sample = false }) {
   const kind = KIND_LABEL[candidate.kind] ?? KIND_LABEL.proposal;
   const { source } = candidate;
   const sourceHref = siteLink(siteUrl, source.url);
@@ -175,7 +176,7 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
             </Lozenge>
             <Text>Reviewed {candidate.review.reviewedAt ? new Date(candidate.review.reviewedAt).toLocaleDateString() : ''}</Text>
           </Inline>
-        ) : <Text>Needs teammate review</Text>}
+        ) : <Text>{sample ? 'On a real project scan, teammates review each finding here and can post a note to the issue.' : 'Needs teammate review'}</Text>}
         {onReview && (
           <Inline space="space.100">
             {!candidate.review && <>
@@ -203,7 +204,7 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
             <Stack key={affected.issueKey} space="space.025">
               <Text>
                 {hideIssueKeys ? 'Why this issue' : (() => {
-                  const href = siteLink(siteUrl, issueUrls[affected.issueKey] ?? `/browse/${affected.issueKey}`);
+                  const href = sample ? null : siteLink(siteUrl, issueUrls[affected.issueKey] ?? `/browse/${affected.issueKey}`);
                   return href ? <Link href={href}>{affected.issueKey}</Link> : affected.issueKey;
                 })()}
                 {` · relevance ${affected.relevance.toFixed(2)}`}
