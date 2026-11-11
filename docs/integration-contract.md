@@ -30,7 +30,23 @@ Jira links (`issues[].url` and the `url` of `jira_issue` / `jira_comment` source
 
 `warnings` holds user-facing Confluence access problems. `notice` is set when candidates were truncated.
 
-The resolver does not write to Jira. `reviewDecision` and `clearDecisionReview` persist only a candidate's review status and timestamp in Forge storage; the key combines the project key and stable candidate ID. `reviewDecision` accepts only the `relevant` and `dismissed` states and requires an authenticated resolver account without storing the account ID. Both actions first confirm, as the signed-in user, that the user can see the Jira project (`GET /rest/api/3/project/{key}`); otherwise nothing is written. Scans read a project's reviews with one paginated prefix query (`review:<KEY>:`), and the issue panel reads reviews only for the candidates it shows. Jira updates remain a separate future action that must validate its target and require an explicit user action.
+Scans and reviews do not write to Jira. `reviewDecision` and `clearDecisionReview` persist only a candidate's review status and timestamp in Forge storage; the key combines the project key and stable candidate ID. `reviewDecision` accepts only the `relevant` and `dismissed` states and requires an authenticated resolver account without storing the account ID. Both actions first confirm, as the signed-in user, that the user can see the Jira project (`GET /rest/api/3/project/{key}`); otherwise nothing is written. Scans read a project's reviews with one paginated prefix query (`review:<KEY>:`), and the issue panel reads reviews only for the candidates it shows. Jira updates remain a separate future action that must validate its target and require an explicit user action.
+
+## Posting a reviewed note (the only Jira write)
+
+`applyDecisionNote({ projectKey, candidateId, issueKey, note, quote, sourceTitle, sourceUrl })` posts one comment on `issueKey` with `asUser()`, so Jira applies the user's own comment permission and shows them as the author.
+
+- Requires the finding's stored review to be `relevant`; otherwise nothing is posted.
+- `issueKey` must belong to `projectKey`. `note` is 1 to 2,000 characters and `quote` at most 320.
+- `sourceUrl` is linked only if it is an `https` link to `/wiki/…` or `/browse/…` on this site; otherwise the source title is plain text.
+- Idempotency and audit: after Jira accepts the comment, `note:<KEY>:<candidateId>:<issueKey>` stores `{ issueKey, commentId, appliedAt }`. A repeat call returns that record with `alreadyApplied: true` and posts nothing. If the comment is posted but the record cannot be saved, the response is `ok: true` with a `warning`.
+- Returns `{ ok: true, note }` or `{ ok: false, error }`; every failure message says whether anything was posted.
+- Scans return each candidate's posted notes as `notes: { [issueKey]: { issueKey, commentId, appliedAt } }`.
+- The comment starts with "Decision Drift Radar note". Scans skip comments that start with that marker, so a posted note is not reported as a new decision.
+
+`listProjects()` returns `{ ok: true, projects: [{ key, name }], more }` (first 50 projects the user can see) for the project picker.
+
+Scopes: `write:jira-work` is used only by `applyDecisionNote`.
 
 ## Known limits
 

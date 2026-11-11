@@ -6,14 +6,14 @@ Decision Drift Radar helps software teams catch decisions recorded in Confluence
 
 ## Current implementation
 
-- Jira global page with a project-key scan.
-- Read-only Jira issue lookup using the signed-in user's access.
+- Jira global page with a project picker, and a Jira project page that scans the open project.
+- Jira issue and project lookups using the signed-in user's access.
 - Scoped Confluence page search for pages mentioning the project key.
 - Decision extraction (`src/domain/`) over issue descriptions, issue comments and those Confluence pages: decisions, open questions and proposals, each with a quote, source link, wording signals, and the reasons it may affect a Jira issue.
 - Jira issue panel showing the decisions that point at the open issue.
 - Shared per-project review state: teammates can mark a finding relevant or dismiss it, with the review date retained in Forge storage.
 - Source links, permission-aware errors, and warnings when Confluence cannot be reached.
-- Jira remains read-only; review actions do not write to Jira.
+- One Jira write, always confirmed by a person: once a finding is marked relevant, a teammate can edit a note and post it as a comment on an affected issue, with the quote and source link. Each note is recorded so it is not posted twice. Reviews alone never change Jira.
 
 ## Local setup
 
@@ -21,8 +21,8 @@ Decision Drift Radar helps software teams catch decisions recorded in Confluence
 2. Install dependencies with npm.
 3. Deploy with `forge deploy --environment development`.
 4. Install on a Jira site with `forge install --site <site>.atlassian.net --product Jira --environment development`.
-5. Grant the Jira, Confluence, and Forge storage scopes when prompted. Confluence pages are optional; Jira descriptions and comments are scanned even when Confluence is unavailable.
-6. If the app was already installed, upgrade the installation after deploying the storage scope so Jira can grant it.
+5. Grant the Jira (read and write), Confluence, and Forge storage scopes when prompted. Confluence pages are optional; Jira descriptions and comments are scanned even when Confluence is unavailable.
+6. If the app was already installed, upgrade the installation after deploying a scope change so Jira can grant it: `forge install --upgrade --site <site>.atlassian.net --product Jira --environment development`.
 7. To enable Confluence page discovery, install the optional Confluence app on the same demo site: run `forge install --demo-site --environment development` again and select Confluence.
 
 Run the domain fixture checks with `npx --yes tsx src/domain/fixtures/checkFixtures.ts`.
@@ -39,5 +39,5 @@ See [Atlassian's Jira Forge tutorial](https://developer.atlassian.com/platform/f
 
 - Show source evidence and links behind every surfaced decision.
 - Explain why a Jira issue may be affected.
-- Keep Jira read-only; teammates record a review instead of the app changing issues.
+- Change Jira only on an explicit, reviewed action: one comment, written in the teammate's name.
 - Store app review state, not copies of full source documents.

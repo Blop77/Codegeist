@@ -154,6 +154,28 @@ function authorName(user) {
   return typeof user?.displayName === 'string' ? user.displayName : undefined;
 }
 
+/** First line of every comment the app posts. Used to keep those comments out of later scans. */
+export const NOTE_MARKER = 'Decision Drift Radar note';
+
+/** ADF body for a reviewed note: the note, the quoted evidence, and a link to the source. */
+export function noteCommentBody({ note, quote, sourceTitle, sourceUrl }) {
+  const text = (value, marks) => ({ type: 'text', text: value, ...(marks ? { marks } : {}) });
+  const title = sourceTitle || 'Source';
+  return {
+    type: 'doc',
+    version: 1,
+    content: [
+      { type: 'paragraph', content: [text(NOTE_MARKER, [{ type: 'strong' }]), text(' · reviewed by a teammate before posting')] },
+      ...note.split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line) => ({ type: 'paragraph', content: [text(line)] })),
+      { type: 'blockquote', content: [{ type: 'paragraph', content: [text(quote)] }] },
+      {
+        type: 'paragraph',
+        content: [text('Source: '), sourceUrl ? text(title, [{ type: 'link', attrs: { href: sourceUrl } }]) : text(title)]
+      }
+    ]
+  };
+}
+
 /** SourceRecords for an issue's description and its comments. */
 export function issueSources(issue, projectKey) {
   const browse = browsePath(issue.key);
@@ -175,7 +197,8 @@ export function issueSources(issue, projectKey) {
 
   for (const comment of issue.fields?.comment?.comments ?? []) {
     const text = adfToText(comment.body);
-    if (!text) continue;
+    // Notes the app posted quote a decision; scanning them would report it a second time.
+    if (!text || text.startsWith(NOTE_MARKER)) continue;
     const author = authorName(comment.author);
     out.push({
       id: `comment-${comment.id}`,

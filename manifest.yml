@@ -6,6 +6,13 @@ modules:
         function: resolver
       render: native
       title: Decision Drift Radar
+  jira:projectPage:
+    - key: decision-drift-radar-project-page
+      resource: main
+      resolver:
+        function: resolver
+      render: native
+      title: Decision Drift Radar
   jira:issuePanel:
     - key: decision-drift-radar-issue-panel
       resource: issue-panel
@@ -37,5 +44,6 @@ permissions:
   scopes:
     - search:confluence
     - read:jira-work
+    - write:jira-work
     - read:confluence-content.all
     - storage:app

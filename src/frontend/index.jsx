@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
   Button,
   Heading,
@@ -6,6 +6,7 @@ import ForgeReconciler, {
   Label,
   Link,
   SectionMessage,
+  Select,
   Spinner,
   Stack,
   Text,
@@ -13,25 +14,59 @@ import ForgeReconciler, {
   useProductContext
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
-import { CandidateCard, KIND_GROUPS, siteLink } from './candidate-card';
+import { CandidateCard, KIND_GROUPS, notePayload, siteLink, withNote } from './candidate-card';
 
 function App() {
-  const siteUrl = useProductContext()?.siteUrl;
+  const context = useProductContext();
+  const siteUrl = context?.siteUrl;
+  // Set when the app is opened from a Jira project's own page.
+  const contextProjectKey = context?.extension?.project?.key;
   const [projectKey, setProjectKey] = useState('');
+  const [projects, setProjects] = useState(null);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reviewBusyId, setReviewBusyId] = useState(null);
   const [reviewError, setReviewError] = useState(null);
 
-  const scan = async () => {
+  const scan = async (key = projectKey) => {
     setLoading(true);
     setResult(null);
+    setReviewError(null);
     try {
-      setResult(await invoke('getProjectRadar', { projectKey }));
+      setResult(await invoke('getProjectRadar', { projectKey: key }));
     } catch {
       setResult({ ok: false, error: 'The project scan failed. Refresh the page and try again.' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // On a project page, scan that project straight away.
+  useEffect(() => {
+    if (!contextProjectKey) return;
+    setProjectKey(contextProjectKey);
+    scan(contextProjectKey);
+  }, [contextProjectKey]);
+
+  // Elsewhere, offer the projects the user can see. If the list fails, a key can still be typed.
+  useEffect(() => {
+    if (!context || contextProjectKey) return undefined;
+    let cancelled = false;
+    invoke('listProjects')
+      .then((response) => { if (!cancelled) setProjects(response?.ok ? response : { projects: [] }); })
+      .catch(() => { if (!cancelled) setProjects({ projects: [] }); });
+    return () => { cancelled = true; };
+  }, [Boolean(context), contextProjectKey]);
+
+  const projectOptions = (projects?.projects ?? []).map((project) => ({ label: `${project.name} (${project.key})`, value: project.key }));
+
+  const applyNote = async (candidate, issueKey, note) => {
+    try {
+      const response = await invoke('applyDecisionNote', notePayload(candidate, siteUrl, issueKey, note));
+      if (response?.ok) setResult((current) => withNote(current, candidate.id, issueKey, response.note));
+      return response;
+    } catch {
+      return { ok: false, error: `Could not add the note. Open ${issueKey} to check whether the comment was posted before trying again.` };
     }
   };
 
@@ -68,26 +103,49 @@ function App() {
         <Text>Find decisions that may not have made it into the work they affect.</Text>
       </Stack>
 
-      <SectionMessage appearance="information" title="Evidence first, read-only">
-        Every finding quotes and links its source and explains why an issue may be affected. The app never changes
-        Jira issues; teammates record a review instead.
+      <SectionMessage appearance="information" title="Evidence first, nothing changes without you">
+        Every finding quotes and links its source and explains why an issue may be affected. The app changes Jira
+        only when you mark a finding relevant, review a note and choose to post it as a comment.
       </SectionMessage>
 
-      <Inline space="space.150" alignBlock="end">
-        <Stack space="space.050">
-          <Label labelFor="project-key">Jira project key</Label>
-          <Textfield
-            id="project-key"
-            name="projectKey"
-            value={projectKey}
-            onChange={(event) => setProjectKey(event.target.value)}
-            placeholder="For example, MC"
-          />
-        </Stack>
-        <Button appearance="primary" onClick={scan} isDisabled={loading || !projectKey.trim()}>
-          {loading ? 'Scanning…' : 'Scan project'}
-        </Button>
-      </Inline>
+      {contextProjectKey ? (
+        <Inline space="space.150" alignBlock="center">
+          <Text>Project {contextProjectKey}</Text>
+          <Button appearance="default" onClick={() => scan(contextProjectKey)} isDisabled={loading}>
+            {loading ? 'Scanning…' : 'Scan again'}
+          </Button>
+        </Inline>
+      ) : (
+        <Inline space="space.150" alignBlock="end">
+          {projectOptions.length > 0 ? (
+            <Stack space="space.050">
+              <Label labelFor="project-select">Jira project</Label>
+              <Select
+                inputId="project-select"
+                options={projectOptions}
+                value={projectOptions.find((option) => option.value === projectKey) ?? null}
+                onChange={(option) => setProjectKey(option?.value ?? '')}
+                placeholder="Choose a project"
+              />
+              {projects?.more && <Text>Showing the first 50 projects.</Text>}
+            </Stack>
+          ) : (
+            <Stack space="space.050">
+              <Label labelFor="project-key">Jira project key</Label>
+              <Textfield
+                id="project-key"
+                name="projectKey"
+                value={projectKey}
+                onChange={(event) => setProjectKey(event.target.value)}
+                placeholder={projects ? 'For example, MC' : 'Loading projects…'}
+              />
+            </Stack>
+          )}
+          <Button appearance="primary" onClick={() => scan()} isDisabled={loading || !projectKey.trim()}>
+            {loading ? 'Scanning…' : 'Scan project'}
+          </Button>
+        </Inline>
+      )}
 
       {loading && <Inline space="space.100"><Spinner /><Text>Loading Jira work…</Text></Inline>}
       {result && !result.ok && <SectionMessage appearance="error" title="Could not scan project">{result.error}</SectionMessage>}
@@ -126,6 +184,7 @@ function App() {
                     issueUrls={issueUrls}
                     onReview={(choice) => reviewCandidate(candidate, choice)}
                     reviewBusy={reviewBusyId === candidate.id}
+                    onApplyNote={(issueKey, note) => applyNote(candidate, issueKey, note)}
                   />
                 ))}
               </Stack>
@@ -165,8 +224,8 @@ function App() {
           <SectionMessage appearance="information" title="How matching works">
             Each finding quotes its source and lists the signals behind it: decision wording, issue keys named in the
             quote or its paragraph, shared terms, and issues that still mention what a decision replaces. Signals are
-            heuristics, not certainty. Mark a finding relevant or dismiss it to save the team's review for this project;
-            reviews never change Jira issues.
+            heuristics, not certainty. Mark a finding relevant or dismiss it to save the team's review for this project.
+            A review alone never changes Jira; a relevant finding can then be posted as a comment you edit and confirm.
           </SectionMessage>
         </Stack>
       )}
