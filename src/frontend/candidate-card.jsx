@@ -1,5 +1,5 @@
 import React from 'react';
-import { Em, Inline, Link, Lozenge, Stack, Strong, Text } from '@forge/react';
+import { Button, Em, Inline, Link, Lozenge, Stack, Strong, Text } from '@forge/react';
 
 export const KIND_GROUPS = [
   { kind: 'decision', title: 'Decisions' },
@@ -28,7 +28,7 @@ function sourceMeta(source) {
  * One extracted candidate with its evidence and the reasons behind every match.
  * `issueUrls` maps issue keys to links; `hideIssueKeys` skips the key on the issue panel.
  */
-export function CandidateCard({ candidate, issueUrls = {}, hideIssueKeys = false }) {
+export function CandidateCard({ candidate, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false }) {
   const kind = KIND_LABEL[candidate.kind] ?? KIND_LABEL.proposal;
   const { source } = candidate;
 
@@ -44,6 +44,34 @@ export function CandidateCard({ candidate, issueUrls = {}, hideIssueKeys = false
       <Text>
         Wording signals ({candidate.confidence.toFixed(2)}): {candidate.confidenceReasons.join('; ')}
       </Text>
+
+      <Stack space="space.050">
+        {candidate.review ? (
+          <Inline space="space.100" alignBlock="center">
+            <Lozenge appearance={candidate.review.status === 'relevant' ? 'success' : 'removed'}>
+              {candidate.review.status === 'relevant' ? 'Marked relevant' : 'Dismissed'}
+            </Lozenge>
+            <Text>Reviewed {candidate.review.reviewedAt ? new Date(candidate.review.reviewedAt).toLocaleDateString() : ''}</Text>
+          </Inline>
+        ) : <Text>Needs teammate review</Text>}
+        {onReview && (
+          <Inline space="space.100">
+            {!candidate.review && <>
+              <Button appearance="primary" isDisabled={reviewBusy} onClick={() => onReview('relevant')}>
+                Mark relevant
+              </Button>
+              <Button appearance="subtle" isDisabled={reviewBusy} onClick={() => onReview('dismissed')}>
+                Dismiss
+              </Button>
+            </>}
+            {candidate.review && (
+              <Button appearance="subtle" isDisabled={reviewBusy} onClick={() => onReview('reset')}>
+                Undo review
+              </Button>
+            )}
+          </Inline>
+        )}
+      </Stack>
 
       {candidate.affectedIssues.length > 0 ? (
         <Stack space="space.050">

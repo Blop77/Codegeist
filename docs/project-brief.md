@@ -14,9 +14,9 @@ For a Jira project or issue, show the important decisions that may affect it, wh
 2. Choose a scope and time window, or open a precomputed project radar.
 3. Review a prioritized list of candidate decisions with source excerpts, timestamps, and links.
 4. Inspect affected Jira issues and the reason each was matched.
-5. Accept, edit, dismiss, or snooze a proposed action.
-6. If accepted, apply a narrowly scoped Jira update and record an audit trail linking the decision and source.
-7. Revisit the radar to see resolved, new, and still-unacknowledged drift.
+5. Mark a candidate relevant or dismiss it, with the choice retained for teammates.
+6. In a later action step, apply a narrowly scoped Jira update only after an explicit approval, and record an audit trail linking the decision and source.
+7. Revisit the radar to see reviewed and still-unreviewed findings.
 
 ## Non-negotiable product principles
 - Evidence before assertion: show source, excerpt, date, and confidence/reasoning for every surfaced decision.
@@ -32,8 +32,8 @@ For a Jira project or issue, show the important decisions that may affect it, wh
 - Confluence source discovery for relevant pages and Jira discussion context.
 - Decision candidate extraction with citations and source links.
 - Affected-issue matching with an explainable reason.
-- Review queue: accept/edit/dismiss/snooze.
-- One safe action: append a reviewed decision note to a selected Jira issue, preserving the source link.
+- Review queue: mark relevant or dismiss, with persistent review state.
+- One safe action (next milestone): append a reviewed decision note to a selected Jira issue, preserving the source link.
 - Status tracking so the same candidate does not repeatedly reappear as new.
 - Seed/demo dataset and a complete end-to-end demonstration.
 

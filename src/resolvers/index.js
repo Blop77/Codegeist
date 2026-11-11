@@ -1,5 +1,5 @@
 import Resolver from '@forge/resolver';
-import api, { route } from '@forge/api';
+import api, { route, storage } from '@forge/api';
 import { extractDecisions } from '../domain/extractDecisions';
 import { issueSources, pageSource, toIssueRecord, toIssueSummary } from './normalize';
 
@@ -7,6 +7,29 @@ const resolver = new Resolver();
 
 const ISSUE_FIELDS = 'summary,status,labels,updated,description,comment,reporter';
 const MAX_CANDIDATES = 50;
+const REVIEW_CHOICES = new Set(['relevant', 'dismissed']);
+
+function reviewKey(projectKey, candidateId) {
+  return `review:${projectKey}:${candidateId}`;
+}
+
+async function attachReviewState(candidates) {
+  let unavailable = false;
+  const results = await Promise.all(candidates.map(async (candidate) => {
+    try {
+      const review = await storage.get(reviewKey(candidate.source.projectKey, candidate.id));
+      return { ...candidate, review: review ?? null };
+    } catch (error) {
+      unavailable = true;
+      console.warn('Decision Drift Radar review state could not be read', error);
+      return { ...candidate, review: null };
+    }
+  }));
+  return {
+    candidates: results,
+    reviewWarning: unavailable ? 'Review history is unavailable. Review actions may require the app storage permission to be granted again.' : null
+  };
+}
 
 function safeError(status, product) {
   if (status === 401 || status === 403) {
@@ -57,7 +80,8 @@ resolver.define('getProjectRadar', async ({ payload }) => {
 
     const sources = [...pages, ...rawIssues.flatMap((issue) => issueSources(issue, projectKey))];
     const issueRecords = rawIssues.map((issue) => toIssueRecord(issue, projectKey));
-    const { candidates, notice } = analyze(sources, issueRecords);
+    const { candidates: extractedCandidates, notice } = analyze(sources, issueRecords);
+    const { candidates, reviewWarning } = await attachReviewState(extractedCandidates);
 
     return {
       ok: true,
@@ -66,6 +90,7 @@ resolver.define('getProjectRadar', async ({ payload }) => {
       pages: pageList(pages),
       candidates,
       notice,
+      reviewWarning,
       warnings
     };
   } catch (error) {
@@ -91,13 +116,58 @@ resolver.define('getIssueDecisionContext', async ({ payload }) => {
     const { pages, warnings } = await searchDecisionPages(projectKey);
 
     const sources = [...pages, ...issueSources(rawIssue, projectKey)];
-    const { candidates, notice } = analyze(sources, [toIssueRecord(rawIssue, projectKey)]);
+    const { candidates: extractedCandidates, notice } = analyze(sources, [toIssueRecord(rawIssue, projectKey)]);
+    const { candidates, reviewWarning } = await attachReviewState(extractedCandidates);
     const relevant = candidates.filter((c) => c.affectedIssues.some((a) => a.issueKey === rawIssue.key));
 
-    return { ok: true, issueKey, candidates: relevant, notice, warnings };
+    return { ok: true, issueKey, candidates: relevant, notice, reviewWarning, warnings };
   } catch (error) {
     console.error('Decision Drift Radar issue context failed', error);
     return { ok: false, error: 'Could not load decision context for this issue.' };
+  }
+});
+
+resolver.define('reviewDecision', async ({ payload, context }) => {
+  const projectKey = String(payload?.projectKey ?? '').trim().toUpperCase();
+  const candidateId = String(payload?.candidateId ?? '').trim();
+  const choice = String(payload?.choice ?? '').trim();
+  if (!/^[A-Z][A-Z0-9_]{1,9}$/.test(projectKey)
+    || !/^dc_[a-f0-9]{16}$/.test(candidateId)
+    || !REVIEW_CHOICES.has(choice)) {
+    return { ok: false, error: 'This review action is invalid. Refresh the project scan and try again.' };
+  }
+  if (!context?.accountId) {
+    return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
+  }
+
+  try {
+    const review = {
+      status: choice,
+      reviewedAt: new Date().toISOString()
+    };
+    await storage.set(reviewKey(projectKey, candidateId), review);
+    return { ok: true, review };
+  } catch (error) {
+    console.error('Decision Drift Radar review update failed', error);
+    return { ok: false, error: 'Could not save this review. Check app permissions and try again.' };
+  }
+});
+
+resolver.define('clearDecisionReview', async ({ payload, context }) => {
+  const projectKey = String(payload?.projectKey ?? '').trim().toUpperCase();
+  const candidateId = String(payload?.candidateId ?? '').trim();
+  if (!/^[A-Z][A-Z0-9_]{1,9}$/.test(projectKey) || !/^dc_[a-f0-9]{16}$/.test(candidateId)) {
+    return { ok: false, error: 'This review action is invalid. Refresh the project scan and try again.' };
+  }
+  if (!context?.accountId) {
+    return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
+  }
+  try {
+    await storage.delete(reviewKey(projectKey, candidateId));
+    return { ok: true };
+  } catch (error) {
+    console.error('Decision Drift Radar review reset failed', error);
+    return { ok: false, error: 'Could not reset this review. Check app permissions and try again.' };
   }
 });
 

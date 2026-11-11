@@ -28,7 +28,7 @@ The Forge app owns Jira access, project selection, UI, and approved Jira updates
 
 `warnings` holds user-facing Confluence access problems. `notice` is set when candidates were truncated.
 
-The resolver does not write to Jira. A later action resolver must validate the target issue and require an explicit user action before adding a comment or note. `DecisionCandidate.id` is stable for the same source and passage, so review state can be keyed on it.
+The resolver does not write to Jira. `reviewDecision` and `clearDecisionReview` persist only a candidate's review status and timestamp in Forge storage; the key combines the project key and stable candidate ID. `reviewDecision` accepts only the `relevant` and `dismissed` states and requires an authenticated resolver account without storing the account ID. Jira updates remain a separate future action that must validate its target and require an explicit user action.
 
 ## Known limits
 

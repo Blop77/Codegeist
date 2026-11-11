@@ -11,8 +11,9 @@ Decision Drift Radar helps software teams catch decisions recorded in Confluence
 - Scoped Confluence page search for pages mentioning the project key.
 - Decision extraction (`src/domain/`) over issue descriptions, issue comments and those Confluence pages: decisions, open questions and proposals, each with a quote, source link, wording signals, and the reasons it may affect a Jira issue.
 - Jira issue panel showing the decisions that point at the open issue.
+- Shared per-project review state: teammates can mark a finding relevant or dismiss it, with the review date retained in Forge storage.
 - Source links, permission-aware errors, and warnings when Confluence cannot be reached.
-- Review actions are not integrated yet; no Jira writes are performed.
+- Jira remains read-only; review actions do not write to Jira.
 
 ## Local setup
 
@@ -20,7 +21,8 @@ Decision Drift Radar helps software teams catch decisions recorded in Confluence
 2. Install dependencies with npm.
 3. Deploy with `forge deploy --environment development`.
 4. Install on a Jira site with `forge install --site <site>.atlassian.net --product Jira --environment development`.
-5. Grant the Jira and Confluence read scopes when prompted. Confluence pages are optional; Jira descriptions and comments are scanned even when Confluence is unavailable.
+5. Grant the Jira, Confluence, and Forge storage scopes when prompted. Confluence pages are optional; Jira descriptions and comments are scanned even when Confluence is unavailable.
+6. If the app was already installed, upgrade the installation after deploying the storage scope so Jira can grant it.
 
 Run the domain fixture checks with `npx --yes tsx src/domain/fixtures/checkFixtures.ts`.
 

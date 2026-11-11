@@ -18,6 +18,8 @@ function App() {
   const [projectKey, setProjectKey] = useState('KAN');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [reviewBusyId, setReviewBusyId] = useState(null);
+  const [reviewError, setReviewError] = useState(null);
 
   const scan = async () => {
     setLoading(true);
@@ -32,6 +34,30 @@ function App() {
   };
 
   const issueUrls = Object.fromEntries((result?.issues ?? []).filter((i) => i.url).map((i) => [i.key, i.url]));
+
+  const reviewCandidate = async (candidate, choice) => {
+    setReviewBusyId(candidate.id);
+    setReviewError(null);
+    try {
+      const response = choice === 'reset'
+        ? await invoke('clearDecisionReview', { projectKey: candidate.source.projectKey, candidateId: candidate.id })
+        : await invoke('reviewDecision', { projectKey: candidate.source.projectKey, candidateId: candidate.id, choice });
+      if (!response?.ok) {
+        setReviewError(response?.error ?? 'Could not save the review. Try again.');
+        return;
+      }
+      setResult((current) => current && ({
+        ...current,
+        candidates: current.candidates.map((item) => (
+          item.id === candidate.id ? { ...item, review: response.review ?? null } : item
+        ))
+      }));
+    } catch {
+      setReviewError('Could not save the review. Check your connection and try again.');
+    } finally {
+      setReviewBusyId(null);
+    }
+  };
 
   return (
     <Stack space="space.300">
@@ -62,6 +88,7 @@ function App() {
 
       {loading && <Inline space="space.100"><Spinner /><Text>Loading Jira work…</Text></Inline>}
       {result && !result.ok && <SectionMessage appearance="error" title="Could not scan project">{result.error}</SectionMessage>}
+      {reviewError && <SectionMessage appearance="error" title="Review not saved">{reviewError}</SectionMessage>}
 
       {result?.ok && (
         <Stack space="space.200">
@@ -79,6 +106,7 @@ function App() {
               </Stack>
             ))}
           {result.notice && <SectionMessage appearance="information">{result.notice}</SectionMessage>}
+          {result.reviewWarning && <SectionMessage appearance="warning" title="Review history unavailable">{result.reviewWarning}</SectionMessage>}
           {(result.candidates ?? []).length === 0 ? (
             <SectionMessage appearance="information" title="No decisions detected">
               The scan reads issue descriptions, comments and Confluence pages mentioning {result.projectKey}, looking for
@@ -91,7 +119,13 @@ function App() {
               <Stack key={kind} space="space.200">
                 <Heading size="medium">{title} · {group.length}</Heading>
                 {group.map((candidate) => (
-                  <CandidateCard key={candidate.id} candidate={candidate} issueUrls={issueUrls} />
+                  <CandidateCard
+                    key={candidate.id}
+                    candidate={candidate}
+                    issueUrls={issueUrls}
+                    onReview={(choice) => reviewCandidate(candidate, choice)}
+                    reviewBusy={reviewBusyId === candidate.id}
+                  />
                 ))}
               </Stack>
             );
@@ -118,6 +152,9 @@ function App() {
             Each result quotes its source and lists the signals behind it: decision wording, issue keys, shared terms, and
             issues that still mention what a decision replaces. Signals are heuristics, not certainty. Review every
             suggested link before acting; the app makes no Jira changes.
+          </SectionMessage>
+          <SectionMessage appearance="information" title="Review decisions">
+            Mark a finding relevant or dismiss it to save the team's review for this Jira project. This records review only; it does not change Jira issues.
           </SectionMessage>
         </Stack>
       )}

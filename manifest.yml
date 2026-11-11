@@ -33,3 +33,4 @@ permissions:
     - search:confluence
     - read:jira-work
     - read:confluence-content.all
+    - storage:app

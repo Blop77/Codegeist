@@ -15,6 +15,7 @@ function IssuePanel() {
   const issueKey = context?.extension?.issue?.key;
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [reviewBusyId, setReviewBusyId] = useState(null);
 
   useEffect(() => {
     if (!issueKey) return;
@@ -38,6 +39,30 @@ function IssuePanel() {
 
   const candidates = result?.candidates ?? [];
 
+  const reviewCandidate = async (candidate, choice) => {
+    setReviewBusyId(candidate.id);
+    setError(null);
+    try {
+      const response = choice === 'reset'
+        ? await invoke('clearDecisionReview', { projectKey: issueKey.split('-')[0], candidateId: candidate.id })
+        : await invoke('reviewDecision', { projectKey: issueKey.split('-')[0], candidateId: candidate.id, choice });
+      if (!response?.ok) {
+        setError(response?.error ?? 'Could not save this review. Try again.');
+        return;
+      }
+      setResult((current) => current && ({
+        ...current,
+        candidates: current.candidates.map((item) => (
+          item.id === candidate.id ? { ...item, review: response.review ?? null } : item
+        ))
+      }));
+    } catch {
+      setError('Could not save this review. Check your connection and try again.');
+    } finally {
+      setReviewBusyId(null);
+    }
+  };
+
   return (
     <Stack space="space.200">
       <Heading size="medium">Decision Drift Radar</Heading>
@@ -50,8 +75,15 @@ function IssuePanel() {
         </SectionMessage>
       )}
       {result?.notice && <SectionMessage appearance="information">{result.notice}</SectionMessage>}
+      {result?.reviewWarning && <SectionMessage appearance="warning" title="Review history unavailable">{result.reviewWarning}</SectionMessage>}
       {candidates.length > 0 ? candidates.map((candidate) => (
-        <CandidateCard key={candidate.id} candidate={candidate} hideIssueKeys />
+        <CandidateCard
+          key={candidate.id}
+          candidate={candidate}
+          hideIssueKeys
+          onReview={(choice) => reviewCandidate(candidate, choice)}
+          reviewBusy={reviewBusyId === candidate.id}
+        />
       )) : result ? (
         <SectionMessage appearance="information" title="No linked decisions found">
           Nothing in this issue's comments or the project's Confluence pages clearly points at this issue. Check the project
