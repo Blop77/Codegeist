@@ -35,6 +35,10 @@ function sourceMeta(source) {
   return [SOURCE_LABEL[source.type] ?? source.type, date, source.author].filter(Boolean).join(' · ');
 }
 
+function sourceVia(source) {
+  return source.via ? `Found through ${source.via}` : null;
+}
+
 export const MAX_NOTE_LENGTH = 2000;
 
 /** Payload for the `applyDecisionNote` resolver. The source link is made absolute for the comment. */
@@ -165,6 +169,7 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
       <Text><Strong>{candidate.summary}</Strong></Text>
       <Text><Em>“{candidate.evidence.quote}”</Em></Text>
       <Text>{sourceMeta(source)}</Text>
+      {sourceVia(source) && <Text><Em>{sourceVia(source)}</Em></Text>}
       <Text>
         Wording signals ({candidate.confidence.toFixed(2)}): {candidate.confidenceReasons.join('; ')}
       </Text>

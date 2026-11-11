@@ -20,6 +20,7 @@ How to install Decision Drift Radar on your own Atlassian site and see it workin
 | `search:confluence`, `read:confluence-content.all` | Find and read Confluence pages that mention the project key. |
 | `storage:app` | Save each finding's review status, and record notes already posted. |
 | Forge LLMs (AI feature, shown on the install screen) | The optional **Find more with AI** pass. Runs only on request. |
+| `read:graph:project:jira`, `read:graph:team:atlassian`, `read:graph:space:confluence`, `read:graph:page:confluence` | Teamwork Graph: find the teams linked to the project you scan, their Confluence spaces, and pages linked from decision pages. |
 | `write:jira-work` | Post one comment on an issue, only when you review a note and select **Post comment**. |
 
 The app calls no external services, and all data stays in Atlassian. The optional AI pass uses a model hosted by Atlassian (Forge LLMs), and runs only when you select **Find more with AI**. Because it is an AI feature, Atlassian shows it on the install screen and asks site admins to approve it.
@@ -74,6 +75,8 @@ You should see:
 **4. Review it.** Select **Mark relevant**. The review is saved for the project; **Undo review** clears it. Nothing in Jira changes yet.
 
 **5. Post a note.** Under `KEY-1`, select **Add note to KEY-1**. Edit the suggested note if you like, then select **Post comment to KEY-1**. The card shows "Note added to KEY-1" with a **View comment** link. The comment on the issue is in your name and contains the note, the quoted decision and a link to the page.
+
+**Teamwork Graph (optional).** If an Atlassian team is linked to your project (in the project's settings, or on the team's page), the scan also reads decision pages in that team's Confluence spaces, even pages that never mention `KEY`, and pages linked from decision pages. The result shows a "Context from Teamwork Graph" box, and those findings say "Found through Teamwork Graph". With no linked team, the scan notes that and works as above.
 
 **6. Try the AI pass (optional).** Below the findings, select **Find more with AI**. It looks for decisions the wording rules missed and shows each with a **Found by AI** label and a quote checked against its source. On your test page it may find nothing more, which is expected. **Try with sample data** includes one indirectly worded decision ("Marcus confirmed the team is locking in weekly payouts to merchants starting in January"), so running the AI pass there shows a result.
 

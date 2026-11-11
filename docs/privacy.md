@@ -14,6 +14,7 @@ When you scan a project or open an issue, the app reads the following, using the
 
 - Jira: the names and keys of projects you can see, and for the scanned project its recent issues, including summaries, descriptions, statuses, labels and comments.
 - Confluence, if the app is installed there: pages whose text mentions the project key.
+- Atlassian's Teamwork Graph: the Atlassian teams linked to the scanned Jira project, those teams' Confluence spaces, and pages linked from the decision pages found. The app then reads decision pages in those spaces and the linked pages, as above.
 
 This content is analysed during the scan and returned to your browser. The app does not keep copies of issue or page content after a scan.
 

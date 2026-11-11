@@ -19,6 +19,7 @@ The link installs the production build. The app sends no data outside Atlassian;
 
 - Jira global page with a project picker, and a Jira project page that scans the open project.
 - Jira issue and project lookups using the signed-in user's access.
+- **Teamwork Graph context**: besides pages that mention the project key, the scan follows Atlassian's Teamwork Graph from the Jira project to its linked teams, their Confluence spaces, and pages linked from decision pages, so decisions recorded in a team's own space are found too. Each such finding says how it was found.
 - **AI pass, on request**: **Find more with AI** asks an Atlassian-hosted model (Forge LLMs) for decisions phrased indirectly that the wording rules miss. A finding is kept only if its quote is found word for word in the source, and it is labelled **Found by AI**. Limited to 40 runs per site per day.
 - **Rovo agent** "Decision Drift Radar": ask in Rovo chat which decisions may affect an issue or a project. It runs the same scan through two read-only actions and answers with the quote, the source link and the reasons. It cannot change Jira; reviews and notes stay in the app.
 - **Try with sample data**: the same analysis on a small bundled project, for sites that have no decision pages yet. It reads and writes nothing on the site.

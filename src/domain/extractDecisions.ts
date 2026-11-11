@@ -277,6 +277,7 @@ function validateSources(raw: unknown[], warnings: ExtractionWarning[]): SourceR
       updatedAt: typeof v.updatedAt === 'string' ? v.updatedAt : '',
     };
     if (typeof v.author === 'string') record.author = v.author;
+    if (typeof v.via === 'string' && v.via.trim()) record.via = v.via.trim().slice(0, 160);
     out.push(record);
   });
   return out;
@@ -459,6 +460,7 @@ export function extractDecisions(input: ExtractionInput, options: ExtractionOpti
           projectKey: source.projectKey,
           updatedAt: source.updatedAt,
           ...(source.author !== undefined ? { author: source.author } : {}),
+          ...(source.via !== undefined ? { via: source.via } : {}),
         },
         confidence: round2(Math.min(MAX_CONFIDENCE, confidence)),
         confidenceReasons: reasons,
@@ -573,6 +575,7 @@ export function verifyProposedFindings(
         projectKey: source.projectKey,
         updatedAt: source.updatedAt,
         ...(source.author !== undefined ? { author: source.author } : {}),
+          ...(source.via !== undefined ? { via: source.via } : {}),
       },
       confidence: 0.5,
       confidenceReasons: reasons,

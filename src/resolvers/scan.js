@@ -5,8 +5,9 @@
 import api, { route } from '@forge/api';
 import { extractDecisions } from '../domain/extractDecisions';
 import { issueSources, pageSource, toIssueRecord } from './normalize';
+import { discoverViaGraph } from './graph';
 
-const ISSUE_FIELDS = 'summary,status,labels,updated,description,comment,reporter';
+const ISSUE_FIELDS = 'summary,status,labels,updated,description,comment,reporter,project';
 const MAX_CANDIDATES = 50;
 const MAX_ISSUES = 50;
 const MAX_PAGES = 20;
@@ -43,28 +44,40 @@ export function analyze(sources, issues) {
   return { candidates, notice: truncated?.message ?? null };
 }
 
-/** Scans the 50 most recently updated issues of a project and the pages that mention its key. */
-export async function scanProject(projectKey) {
+/** Page sources from the key search plus those found through the Teamwork Graph. */
+async function projectPages(projectKey, projectId, cloudId) {
+  const { pages, warnings } = await searchDecisionPages(projectKey);
+  const knownPageIds = pages.map((page) => page.id.replace(/^page-/, ''));
+  const { pages: graphPages, summary } = await discoverViaGraph({ projectKey, projectId, cloudId, knownPageIds });
+  return { pages: [...pages, ...graphPages], warnings, graph: summary };
+}
+
+/**
+ * Scans the 50 most recently updated issues of a project, the pages that mention its key, and
+ * pages the Teamwork Graph connects to it. `cloudId` comes from the Forge context.
+ */
+export async function scanProject(projectKey, { cloudId } = {}) {
   const jql = `project = "${projectKey}" ORDER BY updated DESC`;
   const jiraResponse = await api.asUser().requestJira(
     route`/rest/api/3/search/jql?jql=${jql}&maxResults=${MAX_ISSUES}&fields=${ISSUE_FIELDS}`
   );
   if (!jiraResponse.ok) return { ok: false, error: safeError(jiraResponse.status, 'Jira') };
   const rawIssues = (await jiraResponse.json()).issues ?? [];
-  const { pages, warnings } = await searchDecisionPages(projectKey);
+  const projectId = rawIssues[0]?.fields?.project?.id ?? null;
+  const { pages, warnings, graph } = await projectPages(projectKey, projectId, cloudId);
 
   const sources = [...pages, ...rawIssues.flatMap((issue) => issueSources(issue, projectKey))];
   const issueRecords = rawIssues.map((issue) => toIssueRecord(issue, projectKey));
   const { candidates, notice } = analyze(sources, issueRecords);
-  return { ok: true, rawIssues, pages, warnings, candidates, notice, sources, issueRecords };
+  return { ok: true, rawIssues, pages, warnings, candidates, notice, sources, issueRecords, graph };
 }
 
 /** Scans one issue and its project's pages, keeping only findings that point at that issue. */
-export async function scanIssue(issueKey, projectKey) {
+export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
   const issueResponse = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}?fields=${ISSUE_FIELDS}`);
   if (!issueResponse.ok) return { ok: false, error: safeError(issueResponse.status, 'Jira issue lookup') };
   const rawIssue = await issueResponse.json();
-  const { pages, warnings } = await searchDecisionPages(projectKey);
+  const { pages, warnings, graph } = await projectPages(projectKey, rawIssue.fields?.project?.id ?? null, cloudId);
 
   const sources = [...pages, ...issueSources(rawIssue, projectKey)];
   const issueRecords = [toIssueRecord(rawIssue, projectKey)];
@@ -76,6 +89,7 @@ export async function scanIssue(issueKey, projectKey) {
     rawIssue,
     pages,
     warnings,
+    graph,
     candidates: candidates.filter((c) => c.affectedIssues.some((a) => a.issueKey === rawIssue.key)),
     notice
   };

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
   Button,
+  Em,
   Heading,
   Inline,
   Label,
@@ -210,6 +211,14 @@ function App() {
             Scanned {result.issues.length} {result.sample ? 'sample' : `recent ${result.projectKey}`} issues and {result.pages?.length ?? 0}
             {result.sample ? ' sample' : ''} Confluence{result.pages?.length === 1 ? ' page' : ' pages'}{result.sample ? '.' : ` mentioning ${result.projectKey}.`}
           </Text>
+          {result.graph?.used && result.graph.teams.length > 0 && (
+            <SectionMessage appearance="discovery" title="Context from Teamwork Graph">
+              Teams linked to {result.projectKey}: {result.graph.teams.join(', ')}.
+              {result.graph.spaces.length > 0 ? ` Their Confluence spaces: ${result.graph.spaces.join(', ')}.` : ''}
+              {` Added ${result.graph.pagesAdded} decision ${result.graph.pagesAdded === 1 ? 'page' : 'pages'} from those spaces and ${result.graph.linkedPagesAdded} linked ${result.graph.linkedPagesAdded === 1 ? 'page' : 'pages'} that do not mention ${result.projectKey}.`}
+            </SectionMessage>
+          )}
+          {result.graph?.note && !result.sample && <Text><Em>{result.graph.note}</Em></Text>}
           {result.issues.length === 0 && (
             <SectionMessage appearance="warning" title={`No issues found in ${result.projectKey}`}>
               Check the project key, or pick a project with issues. Findings can still come from Confluence pages, but no
@@ -291,12 +300,15 @@ function App() {
             </SectionMessage>
           ) : result.pages?.length > 0 ? (
             <Stack space="space.100">
-              <Heading size="medium">{result.sample ? 'Sample Confluence pages' : `Confluence pages mentioning ${result.projectKey}`}</Heading>
+              <Heading size="medium">{result.sample ? 'Sample Confluence pages' : `Confluence pages scanned for ${result.projectKey}`}</Heading>
               {result.pages.map((source) => {
                 const href = siteLink(siteUrl, source.url);
-                return href
-                  ? <Link key={source.id} href={href}>{source.title}</Link>
-                  : <Text key={source.id}>{source.title}</Text>;
+                return (
+                  <Text key={source.id}>
+                    {href ? <Link href={href}>{source.title}</Link> : source.title}
+                    {source.via ? ` · found through ${source.via}` : ''}
+                  </Text>
+                );
               })}
             </Stack>
           ) : (

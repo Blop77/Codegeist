@@ -87,18 +87,18 @@ function validReviewTarget(projectKey, candidateId) {
 
 const NO_PROJECT_ACCESS = 'You do not have access to this Jira project, so you cannot review its findings.';
 
-const pageList = (pages) => pages.map(({ id, title, url }) => ({ id, title, url }));
+const pageList = (pages) => pages.map(({ id, title, url, via }) => ({ id, title, url, ...(via ? { via } : {}) }));
 
-resolver.define('getProjectRadar', async ({ payload }) => {
+resolver.define('getProjectRadar', async ({ payload, context }) => {
   const projectKey = String(payload?.projectKey ?? '').trim().toUpperCase();
   if (!validProjectKey(projectKey)) {
     return { ok: false, error: 'Choose a Jira project, or enter a valid project key such as MC.' };
   }
 
   try {
-    const scanned = await scanProject(projectKey);
+    const scanned = await scanProject(projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
-    const { rawIssues, pages, warnings, candidates: extractedCandidates, notice } = scanned;
+    const { rawIssues, pages, warnings, candidates: extractedCandidates, notice, graph } = scanned;
     const { candidates, reviewWarning } = await attachReviewState(projectKey, extractedCandidates);
 
     return {
@@ -109,7 +109,8 @@ resolver.define('getProjectRadar', async ({ payload }) => {
       candidates,
       notice,
       reviewWarning,
-      warnings
+      warnings,
+      graph
     };
   } catch (error) {
     console.error('Decision Drift Radar project scan failed', error);
@@ -117,14 +118,14 @@ resolver.define('getProjectRadar', async ({ payload }) => {
   }
 });
 
-resolver.define('getIssueDecisionContext', async ({ payload }) => {
+resolver.define('getIssueDecisionContext', async ({ payload, context }) => {
   const issueKey = String(payload?.issueKey ?? '').trim().toUpperCase();
   const match = issueKey.match(/^([A-Z][A-Z0-9_]{1,9})-\d+$/);
   if (!match) return { ok: false, error: 'Could not identify this Jira issue.' };
   const projectKey = match[1];
 
   try {
-    const scanned = await scanIssue(issueKey, projectKey);
+    const scanned = await scanIssue(issueKey, projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
     const { warnings, candidates: forIssue, notice } = scanned;
     const { candidates, reviewWarning } = await attachReviewState(projectKey, forIssue);
@@ -299,7 +300,7 @@ resolver.define('getAiFindings', async ({ payload, context }) => {
   if (!validProjectKey(projectKey)) return { ok: false, error: 'Choose a Jira project first.' };
   if (!context?.accountId) return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
   try {
-    const scanned = await scanProject(projectKey);
+    const scanned = await scanProject(projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
     const result = await findWithAi({
       scopeKey: projectKey,

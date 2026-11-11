@@ -92,3 +92,7 @@ permissions:
     - write:jira-work
     - read:confluence-content.all
     - storage:app
+    - read:graph:project:jira
+    - read:graph:team:atlassian
+    - read:graph:space:confluence
+    - read:graph:page:confluence
