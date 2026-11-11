@@ -24,7 +24,7 @@ fetch, store, or write anything.
 | `fixtures/demoInput.ts` | The demo story, covering every behaviour in the spec (listed at the top of the file) |
 | `fixtures/edgeCases.ts` | Malformed records, duplicate ids, bad timestamps, an over-long sentence, empty input |
 | `fixtures/expectedDemoOutput.json` | The exact output for the demo input (golden file) |
-| `fixtures/mcDemoInput.ts` | The live demo-site page and the 25 MC issue titles (see `docs/demo.md`) |
+| `fixtures/mcDemoInput.ts` | The live demo-site page, the 25 MC issue titles and MC-9's drifted description (see `docs/demo.md`) |
 | `fixtures/checkFixtures.ts` | 22 checks against the fixtures; `--update` regenerates the golden file |
 
 ## Run the checks
