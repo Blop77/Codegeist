@@ -21,14 +21,55 @@ modules:
       render: native
       title: Decision Drift Radar
       icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+  rovo:agent:
+    - key: decision-drift-radar-agent
+      name: Decision Drift Radar
+      description: Finds decisions recorded in Confluence and Jira that have not reached the Jira issues they affect, with quoted evidence and reasons.
+      prompt: resource:agent-prompts;agent-prompt.txt
+      conversationStarters:
+        - Which decisions may affect this issue?
+        - Scan this project for decisions that have not reached its issues
+        - Which issues still describe a plan that a decision replaced?
+      actions:
+        - find-project-decisions
+        - find-issue-decisions
+  action:
+    - key: find-project-decisions
+      name: Find decisions for a project
+      function: findProjectDecisions
+      actionVerb: GET
+      description: Scans a Jira project's recent issues, comments and related Confluence pages. Returns decisions, open questions and proposals with the exact quote, the source, and the issues each may affect with reasons.
+      inputs:
+        projectKey:
+          title: Project key
+          type: string
+          required: true
+          description: The Jira project key, for example MC. Use the project the user is viewing if they do not name one.
+    - key: find-issue-decisions
+      name: Find decisions for an issue
+      function: findIssueDecisions
+      actionVerb: GET
+      description: Finds decisions, open questions and proposals that point at one Jira issue, from its description, its comments and related Confluence pages. Returns the exact quote, the source and the reasons.
+      inputs:
+        issueKey:
+          title: Issue key
+          type: string
+          required: true
+          description: The Jira issue key, for example MC-9. Use the issue the user is viewing if they do not name one.
   function:
     - key: resolver
       handler: index.handler
+    - key: findProjectDecisions
+      handler: index.findProjectDecisions
+    - key: findIssueDecisions
+      handler: index.findIssueDecisions
 resources:
   - key: main
     path: src/frontend/index.jsx
   - key: issue-panel
     path: src/frontend/issue-panel.jsx
+  - key: agent-prompts
+    path: src/rovo
 app:
   runtime:
     name: nodejs24.x

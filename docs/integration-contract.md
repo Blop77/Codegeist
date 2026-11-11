@@ -46,6 +46,15 @@ Scans and reviews do not write to Jira. `reviewDecision` and `clearDecisionRevie
 
 `getSampleRadar()` returns the same shape as `getProjectRadar` with `sample: true`, built from `src/resolvers/sample-data.js`. It makes no product or storage calls; its links are empty, and the UI offers no review or note actions for it.
 
+## Rovo agent
+
+The `rovo:agent` module `decision-drift-radar-agent` (prompt in `src/rovo/agent-prompt.txt`) uses two `action` modules, both `actionVerb: GET`, implemented in `src/rovo/actions.js`:
+
+- `find-project-decisions({ projectKey })` runs `scanProject`.
+- `find-issue-decisions({ issueKey })` runs `scanIssue`.
+
+Both run as the person in the chat (`asUser()`), validate the key, and fall back to the Jira project or issue the user is viewing (`payload.context.jira`) when the input is missing or invalid. They return `{ ok, findingCount, findings: [{ kind, statement, quote, source: { type, title, link, updated, author }, wordingSignals, affectedIssues: [{ issueKey, link, relevance, reasons }] }], warnings, howToRead }`, capped at 15 findings. Links are absolute when Rovo passes the page URL, otherwise site-relative. The actions read no review state and write nothing; `src/resolvers/scan.js` holds the scan logic shared with the UI resolvers.
+
 `listProjects()` returns `{ ok: true, projects: [{ key, name }], more }` (first 50 projects the user can see) for the project picker.
 
 Scopes: `write:jira-work` is used only by `applyDecisionNote`.
