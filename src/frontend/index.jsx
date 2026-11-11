@@ -118,10 +118,7 @@ function App() {
 
   return (
     <Stack space="space.300">
-      <Stack space="space.100">
-        <Heading size="large">Decision Drift Radar</Heading>
-        <Text>Find decisions that may not have made it into the work they affect.</Text>
-      </Stack>
+      <Text>Find decisions that may not have made it into the work they affect.</Text>
 
       <SectionMessage appearance="information" title="Evidence first, nothing changes without you">
         Every finding quotes and links its source and explains why an issue may be affected. The app changes Jira
