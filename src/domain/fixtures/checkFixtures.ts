@@ -239,21 +239,28 @@ check('real approvals and decisions still count', () => {
   }
 });
 
-check('MC demo page: one decision, no disclaimer, listed issues matched', () => {
+check('MC demo: one decision, no disclaimer, MC-9 flagged as drift, listed issues matched', () => {
   const r = extractDecisions(mcDemoInput);
   assertEvidenceExact(mcDemoInput, r);
   assert.equal(r.candidates.length, 1, r.candidates.map((c) => c.summary).join(' | '));
   const [c] = r.candidates;
   assert.equal(c.kind, 'decision');
-  assert.equal(c.evidence.quote, 'Decision: We agreed to coordinate the MC website, email, and social campaign under one launch plan.');
+  assert.equal(c.source.type, 'confluence_page', "MC-9's own description is not a finding");
+  assert.equal(
+    c.evidence.quote,
+    'Decision: We agreed to use one shared launch plan instead of separate channel plans for the MC website, email, and social campaign.',
+  );
   assert.ok(!r.candidates.some((x) => /sample decision|not an approved/i.test(x.evidence.quote)));
   const keys = c.affectedIssues.map((a) => a.issueKey);
   for (const key of ['MC-1', 'MC-5', 'MC-9', 'MC-10']) {
-    assert.ok(keys.includes(key), `${key} is matched`);
     const a = c.affectedIssues.find((x) => x.issueKey === key);
-    assert.ok(a?.reasons.includes(`The same paragraph as the decision lists ${key}`), `${key} explains the listing`);
+    assert.ok(a, `${key} is matched`);
+    assert.ok(a.reasons.includes(`The same paragraph as the decision lists ${key}`), `${key} explains the listing`);
   }
   assert.deepEqual(keys.slice(0, 4).sort(), ['MC-1', 'MC-10', 'MC-5', 'MC-9'], 'listed issues rank first');
+  // Drift: MC-9 still describes the plan the decision replaces, so it ranks first.
+  assert.equal(keys[0], 'MC-9');
+  assert.ok(c.affectedIssues[0].reasons.includes('The issue still mentions “separate channel plans”, which this decision replaces'));
 });
 
 if (failures > 0) {
