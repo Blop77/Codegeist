@@ -1,0 +1,41 @@
+modules:
+  jira:globalPage:
+    - key: decision-drift-radar-global-page
+      resource: main
+      resolver:
+        function: resolver
+      render: native
+      title: Decision Drift Radar
+  jira:issuePanel:
+    - key: decision-drift-radar-issue-panel
+      resource: issue-panel
+      resolver:
+        function: resolver
+      render: native
+      title: Decision Drift Radar
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+  function:
+    - key: resolver
+      handler: index.handler
+resources:
+  - key: main
+    path: src/frontend/index.jsx
+  - key: issue-panel
+    path: src/frontend/issue-panel.jsx
+app:
+  runtime:
+    name: nodejs24.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/68a157f1-8d36-4681-ad80-656a45181b6a
+  compatibility:
+    jira:
+      required: true
+    confluence:
+      required: false
+permissions:
+  scopes:
+    - search:confluence
+    - read:jira-work
+    - read:confluence-content.all
+    - storage:app

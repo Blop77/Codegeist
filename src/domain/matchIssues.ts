@@ -214,6 +214,8 @@ export interface MatchSubject {
   summary: string;
   quote: string;
   source: SourceRecord;
+  /** The paragraph (text line) that contains the quote, e.g. "Decision: … Related Jira issues: MC-1, MC-5." */
+  paragraph?: string;
 }
 
 /**
@@ -229,6 +231,7 @@ export function matchIssues(subject: MatchSubject, index: IssueIndex): AffectedI
   const decisionTokens = tokenSet([subject.summary, oldTerm ?? ''].join(' '));
   const quoteKeys = new Set(findIssueKeys(subject.quote));
   const sourceKeys = new Set(findIssueKeys(subject.source.text));
+  const paragraphKeys = new Set(findIssueKeys(subject.paragraph ?? ''));
   const urlKey = BROWSE_KEY.exec(subject.source.url)?.[1];
 
   const out: AffectedIssue[] = [];
@@ -238,6 +241,9 @@ export function matchIssues(subject: MatchSubject, index: IssueIndex): AffectedI
 
     if (quoteKeys.has(issue.key)) {
       parts.push([0.6, `The quoted text names ${issue.key}`]);
+      explicit = true;
+    } else if (paragraphKeys.has(issue.key)) {
+      parts.push([0.5, `The same paragraph as the decision lists ${issue.key}`]);
       explicit = true;
     }
     if (subject.source.type === 'jira_issue' && (subject.source.id === issue.id || urlKey === issue.key)) {
@@ -253,7 +259,7 @@ export function matchIssues(subject: MatchSubject, index: IssueIndex): AffectedI
     if (o.score >= 0.2) {
       const terms = displayTerms(o.shared, issue).map((t) => `“${t}”`).join(', ');
       parts.push([o.score * 0.8, `Shares terms with the issue: ${terms}`]);
-      if (sourceKeys.has(issue.key) && !quoteKeys.has(issue.key)) {
+      if (sourceKeys.has(issue.key) && !quoteKeys.has(issue.key) && !paragraphKeys.has(issue.key)) {
         parts.push([0.15, `The source also mentions ${issue.key}`]);
       }
     }

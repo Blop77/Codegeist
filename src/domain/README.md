@@ -24,18 +24,19 @@ fetch, store, or write anything.
 | `fixtures/demoInput.ts` | The demo story, covering every behaviour in the spec (listed at the top of the file) |
 | `fixtures/edgeCases.ts` | Malformed records, duplicate ids, bad timestamps, an over-long sentence, empty input |
 | `fixtures/expectedDemoOutput.json` | The exact output for the demo input (golden file) |
-| `fixtures/checkFixtures.ts` | 19 checks against the fixtures; `--update` regenerates the golden file |
+| `fixtures/mcDemoInput.ts` | The live demo-site page and the 25 MC issue titles (see `docs/demo.md`) |
+| `fixtures/checkFixtures.ts` | 22 checks against the fixtures; `--update` regenerates the golden file |
 
 ## Run the checks
 
-The repo has no `package.json` yet, so `tsx` runs the checks without any setup:
+The Forge app does not depend on a TypeScript runtime. Fetch `tsx` temporarily to run the fixture checks:
 
 ```bash
-npx tsx src/domain/fixtures/checkFixtures.ts
+npx --yes tsx src/domain/fixtures/checkFixtures.ts
 ```
 
-The module itself has no Node dependencies. Only `checkFixtures.ts` uses `node:assert` and
-`node:fs`, and nothing imports it.
+The domain module has no runtime dependencies. Only `checkFixtures.ts` uses `node:assert` and
+`node:fs`, and nothing imports it into the Forge app.
 
 ## Example
 
@@ -111,7 +112,7 @@ is split into sentences with exact UTF-16 offsets.
 | decision | "Decision:" / "Agreed:" / "Decided …:" label | 0.85 |
 | decision | "we decided/agreed", "decided to", "final call" | 0.80 |
 | decision | "we're going with" | 0.65 |
-| decision | "approved", "going forward" | 0.60 |
+| decision | "approved" as a verb or label ("was approved by", "leadership approved the", "Approved:"), "signed off", "going forward" | 0.60 |
 | open_question | a question with "should we", "do we", "which", "whether" | 0.60 |
 | proposal | "we should", "let's", "propose", "probably", "leaning towards" | 0.60 |
 | decision | a 4+ word statement under a Decisions heading, with no other signal | 0.60 |
@@ -119,7 +120,11 @@ is split into sentences with exact UTF-16 offsets.
 Adjustments: +0.05 under a Decisions heading, +0.05 when the source title reads like a
 decision record (decision, ADR, RFC, spec), +0.05 when stated more than once in the source.
 Confidence is capped at 0.95, because these are wording heuristics, not certainty.
-Sentences about the document itself ("this page records what we agreed") are skipped.
+Sentences about the document itself ("this page records what we agreed") are skipped, and so
+are disclaimers ("This is a sample decision, not an approved team decision", "not a final
+decision", "for illustration only"). Negated approvals ("not yet approved", "no one has signed
+off") and adjective uses ("approved vendors") never count as approval; "never decided" is an
+open question.
 
 **Deduplication.** Within one source, the same statement (identical text, or the same kind
 with 80%+ shared terms) becomes one candidate. The clearest wording is kept, with a
@@ -131,6 +136,7 @@ when at least one of these holds, and each one that holds becomes a reason:
 | Signal | Relevance added |
 | --- | --- |
 | The quote names the issue key | 0.60 |
+| Otherwise, the same paragraph or list item lists the key ("… Related Jira issues: MC-1, MC-5.") | 0.50 |
 | The source is the issue itself, or a comment on it (from the `/browse/KEY` URL or a matching id) | 0.55 |
 | Shared terms: rarer words weigh more; needs 2+ shared terms and 36%+ of the decision's term weight to count on its own | up to 0.80 × overlap |
 | The issue still names what the decision replaces or removes ("X instead of Y", "replace X with Y", "from X to Y", "drop X", "X is out of scope") | 0.20 |
