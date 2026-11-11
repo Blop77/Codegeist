@@ -4,3 +4,4 @@ node_modules.incomplete/
 .atlassian/
 .DS_Store
 ._*
+src/**/._*
