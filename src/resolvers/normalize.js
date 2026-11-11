@@ -191,17 +191,27 @@ export function issueSources(issue, projectKey) {
   return out;
 }
 
+/**
+ * Site-relative Confluence page link. Inside Forge, `_links.base` can be the bare site URL
+ * without `/wiki`, so `base + webui` opened Jira's dead-link page (`/spaces/...`). Confluence
+ * pages always live under `/wiki` on the site; the UI prefixes its own `siteUrl`.
+ */
+export function confluencePath(webui) {
+  if (typeof webui !== 'string' || !webui.trim()) return '';
+  if (/^https?:\/\//i.test(webui)) return '';
+  const path = webui.startsWith('/') ? webui : `/${webui}`;
+  return /^\/wiki(?:\/|$)/.test(path) ? path : `/wiki${path}`;
+}
+
 /** SourceRecord for a Confluence page found by the project-key search. */
 export function pageSource(page, projectKey) {
   const adf = parseAdf(page.body?.atlas_doc_format?.value);
   const text = adf ? adfToText(adf) : storageToText(page.body?.storage?.value);
-  const base = page._links?.base ?? '';
-  const webui = page._links?.webui ?? '';
   return {
     id: `page-${page.id}`,
     type: 'confluence_page',
     title: page.title ?? 'Untitled page',
-    url: webui ? `${base}${webui}` : '',
+    url: confluencePath(page._links?.webui),
     text,
     projectKey,
     updatedAt: page.version?.when ?? '',

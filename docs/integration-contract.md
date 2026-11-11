@@ -26,7 +26,7 @@ The Forge app uses Jira as its required product and Confluence as an optional co
 - `{ ok: true, issueKey, candidates: DecisionCandidate[], notice, warnings }`
 - `{ ok: false, error }`
 
-Jira links (`issues[].url` and the `url` of `jira_issue` / `jira_comment` sources) are site-relative paths such as `/browse/MC-1`, because inside Forge `issue.self` points at the API gateway (`api.atlassian.com/ex/jira/<cloudId>/…`), not the site. The UI prefixes `siteUrl` from its product context. Confluence links are absolute, built from the page's `_links.base`.
+Jira links (`issues[].url` and the `url` of `jira_issue` / `jira_comment` sources) are site-relative paths such as `/browse/MC-1`, because inside Forge `issue.self` points at the API gateway (`api.atlassian.com/ex/jira/<cloudId>/…`), not the site. Confluence page links (`pages[].url` and `confluence_page` sources) are site-relative too, as `/wiki` + the page's `_links.webui`, because inside Forge `_links.base` can be the bare site URL without `/wiki`. The UI prefixes `siteUrl` from its product context for both.
 
 `warnings` holds user-facing Confluence access problems. `notice` is set when candidates were truncated.
 
