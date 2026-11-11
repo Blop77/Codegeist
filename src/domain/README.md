@@ -28,14 +28,14 @@ fetch, store, or write anything.
 
 ## Run the checks
 
-The repo has no `package.json` yet, so `tsx` runs the checks without any setup:
+The Forge app does not depend on a TypeScript runtime. Fetch `tsx` temporarily to run the fixture checks:
 
 ```bash
-npx tsx src/domain/fixtures/checkFixtures.ts
+npx --yes tsx src/domain/fixtures/checkFixtures.ts
 ```
 
-The module itself has no Node dependencies. Only `checkFixtures.ts` uses `node:assert` and
-`node:fs`, and nothing imports it.
+The domain module has no runtime dependencies. Only `checkFixtures.ts` uses `node:assert` and
+`node:fs`, and nothing imports it into the Forge app.
 
 ## Example
 
