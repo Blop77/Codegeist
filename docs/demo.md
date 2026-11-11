@@ -21,6 +21,16 @@ To roll out a scope change:
 
 Redeploys without scope changes need no installation upgrade.
 
+## Share the app with reviewers
+
+Reviewers install from an installation link, which needs the production environment:
+
+1. `forge deploy --environment production`
+2. In the [developer console](https://developer.atlassian.com/console/myapps/), open the app, then **Distribution → Edit**, choose **Sharing**, fill in the app details, select Jira and Confluence, and save.
+3. Copy the installation link and give it to reviewers with [testing-instructions.md](testing-instructions.md).
+
+After later changes, deploy to production again. Reviewers who already installed the app get code updates; new permissions need their approval.
+
 ## Run the demo
 
 1. In Jira on the demo site, open **Apps → Decision Drift Radar**.

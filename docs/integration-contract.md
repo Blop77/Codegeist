@@ -44,6 +44,8 @@ Scans and reviews do not write to Jira. `reviewDecision` and `clearDecisionRevie
 - Scans return each candidate's posted notes as `notes: { [issueKey]: { issueKey, commentId, appliedAt } }`.
 - The comment starts with "Decision Drift Radar note". Scans skip comments that start with that marker, so a posted note is not reported as a new decision.
 
+`getSampleRadar()` returns the same shape as `getProjectRadar` with `sample: true`, built from `src/resolvers/sample-data.js`. It makes no product or storage calls; its links are empty, and the UI offers no review or note actions for it.
+
 `listProjects()` returns `{ ok: true, projects: [{ key, name }], more }` (first 50 projects the user can see) for the project picker.
 
 Scopes: `write:jira-work` is used only by `applyDecisionNote`.
