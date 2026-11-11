@@ -9,7 +9,8 @@ How the hackathon demo is set up, how to run it, and what it does and does not s
 | Demo site | `one-atlas-pxox.atlassian.net`, a Forge demo site active until 2027-02-09 |
 | Installation | One development installation covering **Jira (required)** and **Confluence**, major version 4, up to date (`forge install list`) |
 | Other site | `decitrace.atlassian.net` is still on major version 2. Forge classifies it as a production site, so it is deliberately not upgraded with development builds. |
-| Deployed code | Development version **4.0.0**, deployed from commit `810bb47` and verified live on project `MC`: the project picker and project page, one decision with MC-9 flagged as drift, working issue and page links, and a reviewed note posted to MC-9 as a comment with the quote and source link. A rescan still shows one decision and does not offer to post the note again. |
+| Development | Version **4.4.0**, verified live on project `MC`: the project picker and project page, one decision with MC-9 flagged as drift, working links, a reviewed note posted to MC-9, the sample-data scan, and the Rovo agent answering "Which decisions may affect this issue?" on MC-9 with the quote, the page link and the drift reason. |
+| Production | Deployed, and shared by installation link (Distribution: Sharing with anyone). Reviewers install this build. Redeploy production after every change that should reach them. |
 
 Version 4 added the `write:jira-work` scope for the note action, so the installation was upgraded to grant it.
 
@@ -47,6 +48,7 @@ After later changes, deploy to production again. Reviewers who already installed
 7. Click the source link or an issue key to open the page or issue on the site.
 8. Select **Mark relevant**. Under MC-9, select **Add note to MC-9**, edit the suggested note if you want, then **Post comment to MC-9**. The card shows "Note added to MC-9" with a **View comment** link; the comment on MC-9 carries the note, the quote and a link to the Confluence page, in your name.
 9. Open MC-9. The issue panel shows the same decision, the "still mentions" reason, the saved review and the posted note. Rescanning still shows one decision: the app's own comment is not read as a new one, and the note cannot be posted twice.
+10. Still on MC-9, open **Rovo Chat**, choose the **Decision Drift Radar** agent, and select **Which decisions may affect this issue?** The agent answers with the same decision, quote, source link and reasons.
 
 You can also open **Decision Drift Radar** from the MC project's own navigation, where it scans MC without choosing a project.
 

@@ -80,6 +80,16 @@ You should see:
 - Open `KEY-1`: the **Decision Drift Radar** panel on the issue shows the same decision, its review and the posted note.
 - Open the project and choose **Decision Drift Radar** in its navigation: the app scans that project without asking for a key.
 
+## Part 3: ask the Rovo agent (optional)
+
+If Rovo is available on your site, the app adds an agent named **Decision Drift Radar**.
+
+1. Open `KEY-1` in Jira and open **Rovo Chat**.
+2. In the agent menu at the top of the chat, search for **Decision Drift Radar** and select it.
+3. Choose the starter **Which decisions may affect this issue?**
+
+The agent runs the same scan and answers with the decision, its exact quote, a link to your page, and the reasons, starting with "The issue still mentions "separate channel plans", which this decision replaces". You can also ask it to scan the project. The agent only reads; to review a finding or post a note it sends you back to the app.
+
 ## If something looks wrong
 
 | What you see | What to do |

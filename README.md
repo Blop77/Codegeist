@@ -8,6 +8,7 @@ Decision Drift Radar helps software teams catch decisions recorded in Confluence
 
 - Jira global page with a project picker, and a Jira project page that scans the open project.
 - Jira issue and project lookups using the signed-in user's access.
+- **Rovo agent** "Decision Drift Radar": ask in Rovo chat which decisions may affect an issue or a project. It runs the same scan through two read-only actions and answers with the quote, the source link and the reasons. It cannot change Jira; reviews and notes stay in the app.
 - **Try with sample data**: the same analysis on a small bundled project, for sites that have no decision pages yet. It reads and writes nothing on the site.
 - Scoped Confluence page search for pages mentioning the project key.
 - Decision extraction (`src/domain/`) over issue descriptions, issue comments and those Confluence pages: decisions, open questions and proposals, each with a quote, source link, wording signals, and the reasons it may affect a Jira issue.
