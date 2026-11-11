@@ -40,7 +40,7 @@ Sample findings have no links, and cannot be reviewed or posted. Part 2 covers t
 
 ## Part 2: your own data (about five minutes)
 
-Use any Jira project that has at least one issue. Below, `KEY` is that project's key (for example `KAN`), and `KEY-1` is one of its issues.
+Use any Jira project that has at least one issue (Jira now calls projects "spaces"). On a brand-new site with no projects, create one and add an issue first. Below, `KEY` is that project's key (for example `KAN`), and `KEY-1` is one of its issues.
 
 **1. Create a Confluence page** in any space, titled `Decision log`, with these three paragraphs. Replace `KEY` with your project key in both places, and publish:
 
@@ -84,11 +84,11 @@ You should see:
 
 - Scan again: there is still one decision. The app's own comment is not read as a new decision, and `KEY-1` no longer offers to post the note.
 - Open `KEY-1`: the **Decision Drift Radar** panel on the issue shows the same decision, its review and the posted note.
-- Open the project and choose **Decision Drift Radar** in its navigation: the app scans that project without asking for a key.
+- Open the project and choose **Decision Drift Radar** in its sidebar (Jira labels it "Space navigation"): the app scans that project without asking for a key. On a new site the app may not be in the sidebar yet: use **Add to navigation**, then find it under **More**.
 
 ## Part 3: ask the Rovo agent (optional)
 
-If Rovo is available on your site, the app adds an agent named **Decision Drift Radar**.
+If Rovo is available on your site, the app adds an agent named **Decision Drift Radar**. Rovo is not enabled on every site; a new free developer site may not have it. Atlassian's Codegeist demo sites (`forge site provision`) include it.
 
 1. Open `KEY-1` in Jira and open **Rovo Chat**.
 2. In the agent menu at the top of the chat, search for **Decision Drift Radar** and select it.
