@@ -9,9 +9,9 @@ How the hackathon demo is set up, how to run it, and what it does and does not s
 | Demo site | `one-atlas-pxox.atlassian.net`, a Forge demo site active until 2027-02-09 |
 | Installation | One development installation covering **Jira (required)** and **Confluence**, major version 3, up to date (`forge install list`) |
 | Other site | `decitrace.atlassian.net` is still on major version 2. Forge classifies it as a production site, so it is deliberately not upgraded with development builds. |
-| Deployed code | The last `forge deploy --environment development` ran from Codex's checkout of `codex/forge-integration`. The disclaimer, approval and paragraph-matching fixes, plus the review access checks, are on `claude/demo-hardening` and **are not deployed yet**. |
+| Deployed code | Development version **3.5.0**, deployed from commit `60cbb45` and verified live on project `MC`: one decision, no disclaimer finding, the four listed issues matched, and issue, source and Confluence page links all open on the site. |
 
-After merging, redeploy with `forge deploy --environment development`. No new scopes are needed, so the existing installation does not need an upgrade.
+Redeploy after code changes with `forge deploy --environment development`. The current scopes cover every feature, so redeploys do not need an installation upgrade.
 
 ## Run the demo
 
@@ -22,9 +22,10 @@ After merging, redeploy with `forge deploy --environment development`. No new sc
    - quote: "Decision: We agreed to coordinate the MC website, email, and social campaign under one launch plan."
    - signals: starts with a "Decision:" label; the page title reads like a decision record
    - may affect: MC-1, MC-5, MC-9 and MC-10, each because "the same paragraph as the decision lists" it
-5. Select **Mark relevant**, then open MC-1 or MC-10. The issue panel shows the same decision and its saved review. **Undo review** clears it on both screens.
+5. Click the source link or an issue key to open the page or issue on the site.
+6. Select **Mark relevant**, then open MC-1 or MC-10. The issue panel shows the same decision and its saved review. **Undo review** clears it on both screens.
 
-Expected with this branch deployed: exactly one decision from the demo page. The page's disclaimer sentence ("This is a sample decision, not an approved Marketing team decision.") is not a finding. The deployed version before this branch listed that disclaimer as a second decision, and matched MC-9, MC-7 and MC-42 instead of the four listed issues.
+The page's disclaimer sentence ("This is a sample decision, not an approved Marketing team decision.") is deliberately not a finding. Versions before 3.3.0 listed it as a second decision, and matched MC-9, MC-7 and MC-42 instead of the four listed issues; versions before 3.5.0 had broken Jira and Confluence links.
 
 ## Sample data and its limits
 
