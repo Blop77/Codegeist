@@ -36,7 +36,7 @@ After later changes, deploy to production again. Reviewers who already installed
 
 1. In Jira on the demo site, open **Apps → Decision Drift Radar**.
 2. Choose **Marketing Content (MC)**, the seeded project, in the **Jira project** dropdown and select **Scan project**.
-3. The scan reads the 25 most recently updated MC issues (descriptions and comments) and Confluence pages that mention `MC`.
+3. The scan reads the 50 most recently updated MC issues (descriptions and comments) and Confluence pages that mention `MC`.
 4. Under **Decisions**, open the finding from *Demo Decision — MC Campaign Coordination*:
    - quote: "Decision: We agreed to use one shared launch plan instead of separate channel plans for the MC website, email, and social campaign."
    - signals: starts with a "Decision:" label; the page title reads like a decision record

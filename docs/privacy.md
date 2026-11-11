@@ -1,12 +1,12 @@
 # Privacy policy
 
-Last updated: 11 November 2026
+Last updated: 12 November 2026
 
 Decision Drift Radar is an Atlassian Forge app made by the Decision Drift Radar team. This policy describes what the app does with data on a site where it is installed.
 
 ## Where data is processed
 
-The app runs entirely on Atlassian's Forge platform. It sends no data to servers outside Atlassian, and it uses no external services, analytics or AI models.
+The app runs entirely on Atlassian's Forge platform. It sends no data to servers outside Atlassian, and it uses no external services or analytics.
 
 ## What the app reads
 
@@ -17,12 +17,17 @@ When you scan a project or open an issue, the app reads the following, using the
 
 This content is analysed during the scan and returned to your browser. The app does not keep copies of issue or page content after a scan.
 
+## The optional AI pass
+
+When a person selects **Find more with AI**, the app sends the text of the scanned pages, issue descriptions and comments (up to about 24,000 characters) to a language model hosted by Atlassian through Forge LLMs. Atlassian runs the model; the text does not go to an outside AI provider. The app sends it only when someone selects the button, never automatically, and keeps no copy of the text or of the model's reply. Findings from the AI pass are shown only if their quote is found word for word in the source.
+
 ## What the app stores
 
 The app stores a small amount of data in Forge storage for your site:
 
 - For each finding a teammate reviews: the review status ("relevant" or "dismissed") and the time of the review.
 - For each note posted to Jira: the issue key, the comment's id and the time it was posted.
+- For the AI pass: a count of runs per day and the time of the last run per project, used to limit usage.
 
 These records are keyed by project key and a generated id for the finding. The app does not store Atlassian account ids, names, email addresses, or the text of issues, pages or comments.
 

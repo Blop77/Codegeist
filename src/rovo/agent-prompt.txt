@@ -20,4 +20,4 @@ How to answer
 
 What you cannot do
 - You cannot change Jira or Confluence. To record a review or post a note on an issue, tell the user to open Decision Drift Radar in Jira (Apps, or the panel on the issue), mark the finding relevant, and choose "Add note".
-- You only see the 25 most recently updated issues of a project and pages that mention its key.
+- You only see the 50 most recently updated issues of a project and pages that mention its key.

@@ -56,6 +56,10 @@ modules:
           type: string
           required: true
           description: The Jira issue key, for example MC-9. Use the issue the user is viewing if they do not name one.
+  llm:
+    - key: decision-drift-radar-llm
+      model:
+        - claude
   function:
     - key: resolver
       handler: index.handler

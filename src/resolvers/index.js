@@ -3,6 +3,7 @@ import api, { route, startsWith, storage } from '@forge/api';
 import { noteCommentBody, toIssueSummary } from './normalize';
 import { analyze, safeError, scanIssue, scanProject, validProjectKey } from './scan';
 import { SAMPLE_PROJECT_KEY, sampleIssues, sampleSources } from './sample-data';
+import { findWithAi } from './ai';
 
 const resolver = new Resolver();
 
@@ -289,6 +290,49 @@ resolver.define('getSampleRadar', async () => {
 });
 
 /** Projects the signed-in user can see, for the project picker. */
+/**
+ * Optional AI pass for a real project: rescans as the user, then asks the model only for what the
+ * rules missed. Findings come back with review state, like a normal scan.
+ */
+resolver.define('getAiFindings', async ({ payload, context }) => {
+  const projectKey = String(payload?.projectKey ?? '').trim().toUpperCase();
+  if (!validProjectKey(projectKey)) return { ok: false, error: 'Choose a Jira project first.' };
+  if (!context?.accountId) return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
+  try {
+    const scanned = await scanProject(projectKey);
+    if (!scanned.ok) return { ok: false, error: scanned.error };
+    const result = await findWithAi({
+      scopeKey: projectKey,
+      sources: scanned.sources,
+      issues: scanned.issueRecords,
+      known: scanned.candidates
+    });
+    if (!result.ok) return result;
+    const { candidates } = await attachReviewState(projectKey, result.candidates);
+    return { ...result, candidates: candidates.map((c) => ({ ...c, ai: true })) };
+  } catch (error) {
+    console.error('Decision Drift Radar AI findings failed', error);
+    return { ok: false, error: 'The AI pass could not complete. The rule-based findings above are unaffected.' };
+  }
+});
+
+/** The AI pass over the bundled sample project. Reads nothing from the site. */
+resolver.define('getSampleAiFindings', async ({ context }) => {
+  if (!context?.accountId) return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
+  try {
+    const { candidates: known } = analyze(sampleSources, sampleIssues);
+    const result = await findWithAi({ scopeKey: `sample-${SAMPLE_PROJECT_KEY}`, sources: sampleSources, issues: sampleIssues, known });
+    if (!result.ok) return result;
+    return {
+      ...result,
+      candidates: result.candidates.map((c) => ({ ...c, source: { ...c.source, url: '' }, review: null, notes: {}, ai: true }))
+    };
+  } catch (error) {
+    console.error('Decision Drift Radar sample AI findings failed', error);
+    return { ok: false, error: 'The AI pass could not complete.' };
+  }
+});
+
 resolver.define('listProjects', async () => {
   try {
     const response = await api.asUser().requestJira(route`/rest/api/3/project/search?maxResults=50&orderBy=name`);

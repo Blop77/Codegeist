@@ -19,9 +19,10 @@ How to install Decision Drift Radar on your own Atlassian site and see it workin
 | `read:jira-work` | Read issues, descriptions and comments in the project you scan, and list your projects. |
 | `search:confluence`, `read:confluence-content.all` | Find and read Confluence pages that mention the project key. |
 | `storage:app` | Save each finding's review status, and record notes already posted. |
+| Forge LLMs (AI feature, shown on the install screen) | The optional **Find more with AI** pass. Runs only on request. |
 | `write:jira-work` | Post one comment on an issue, only when you review a note and select **Post comment**. |
 
-The app calls no external services. All data stays in Atlassian.
+The app calls no external services, and all data stays in Atlassian. The optional AI pass uses a model hosted by Atlassian (Forge LLMs), and runs only when you select **Find more with AI**. Because it is an AI feature, Atlassian shows it on the install screen and asks site admins to approve it.
 
 ## Part 1: see it in one minute (no setup)
 
@@ -74,7 +75,9 @@ You should see:
 
 **5. Post a note.** Under `KEY-1`, select **Add note to KEY-1**. Edit the suggested note if you like, then select **Post comment to KEY-1**. The card shows "Note added to KEY-1" with a **View comment** link. The comment on the issue is in your name and contains the note, the quoted decision and a link to the page.
 
-**6. Check the safeguards.**
+**6. Try the AI pass (optional).** Below the findings, select **Find more with AI**. It looks for decisions the wording rules missed and shows each with a **Found by AI** label and a quote checked against its source. On your test page it may find nothing more, which is expected. **Try with sample data** includes one indirectly worded decision ("Marcus confirmed the team is locking in weekly payouts to merchants starting in January"), so running the AI pass there shows a result.
+
+**7. Check the safeguards.**
 
 - Scan again: there is still one decision. The app's own comment is not read as a new decision, and `KEY-1` no longer offers to post the note.
 - Open `KEY-1`: the **Decision Drift Radar** panel on the issue shows the same decision, its review and the posted note.
@@ -103,5 +106,5 @@ The agent runs the same scan and answers with the decision, its exact quote, a l
 ## What the app does not do
 
 - It never edits issue fields, statuses or assignees. Its only change to Jira is the comment you confirm.
-- It reads the 25 most recently updated issues in a project and up to 10 pages per scan.
-- It works on English text with explicit decision wording. It does not use an AI model, so the same input always gives the same findings.
+- It reads the 50 most recently updated issues in a project and up to 20 pages per scan.
+- The main scan works on English text with explicit decision wording and uses no AI model, so the same input always gives the same findings. The optional AI pass finds indirectly worded decisions; it keeps a finding only if its quote is found word for word in the source, and it is limited to 40 runs per site per day.

@@ -55,6 +55,14 @@ The `rovo:agent` module `decision-drift-radar-agent` (prompt in `src/rovo/agent-
 
 Both run as the person in the chat (`asUser()`), validate the key, and fall back to the Jira project or issue the user is viewing (`payload.context.jira`) when the input is missing or invalid. They return `{ ok, findingCount, findings: [{ kind, statement, quote, source: { type, title, link, updated, author }, wordingSignals, affectedIssues: [{ issueKey, link, relevance, reasons }] }], warnings, howToRead }`, capped at 15 findings. Links are absolute when Rovo passes the page URL, otherwise site-relative. The actions read no review state and write nothing; `src/resolvers/scan.js` holds the scan logic shared with the UI resolvers.
 
+## AI pass
+
+`getAiFindings({ projectKey })` rescans the project as the user, then calls Forge LLMs (`@forge/llm`, model `claude-sonnet-5`, at most 1,500 output tokens) with up to 15 sources and 24,000 characters, and the rule-based findings as "already found". The model returns `{ findings: [{ sourceId, quote, kind, reason }] }`. `verifyProposedFindings` in `src/domain/extractDecisions.ts` keeps a proposal only if its quote occurs verbatim in that source, is 12 to 280 characters, has a valid kind, and does not overlap a known finding; kept proposals get the same span, id and issue matching as rule-based findings, and the reason "Found by the AI pass; the quote was checked word for word against the source". Results carry `ai: true` and review state; they are not stored.
+
+`getSampleAiFindings()` does the same over the bundled sample data and reads nothing from the site.
+
+Cost guards: a run is refused after 40 runs per site per day (`ai-usage:<date>`) or within 30 seconds of the last run for the same project (`ai-last:<KEY>`). Model errors and unparseable replies return a message, never a partial result. The `llm` module made this a major version.
+
 `listProjects()` returns `{ ok: true, projects: [{ key, name }], more }` (first 50 projects the user can see) for the project picker.
 
 Scopes: `write:jira-work` is used only by `applyDecisionNote`.

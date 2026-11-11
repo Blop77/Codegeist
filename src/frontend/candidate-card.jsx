@@ -159,6 +159,7 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
     <Stack space="space.075">
       <Inline space="space.100" alignBlock="center">
         <Lozenge appearance={kind.appearance}>{kind.text}</Lozenge>
+        {candidate.ai && <Lozenge appearance="new">Found by AI</Lozenge>}
         <Text>{sourceHref ? <Link href={sourceHref}>{source.title || 'Source'}</Link> : source.title}</Text>
       </Inline>
       <Text><Strong>{candidate.summary}</Strong></Text>

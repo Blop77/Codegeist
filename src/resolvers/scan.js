@@ -8,6 +8,8 @@ import { issueSources, pageSource, toIssueRecord } from './normalize';
 
 const ISSUE_FIELDS = 'summary,status,labels,updated,description,comment,reporter';
 const MAX_CANDIDATES = 50;
+const MAX_ISSUES = 50;
+const MAX_PAGES = 20;
 
 export function validProjectKey(projectKey) {
   return /^[A-Z][A-Z0-9_]{1,9}$/.test(projectKey);
@@ -23,7 +25,7 @@ export function safeError(status, product) {
 export async function searchDecisionPages(projectKey) {
   const cql = `type = page AND text ~ "${projectKey}" ORDER BY lastmodified DESC`;
   const response = await api.asUser().requestConfluence(
-    route`/wiki/rest/api/content/search?cql=${cql}&limit=10&expand=version,body.atlas_doc_format,body.storage`
+    route`/wiki/rest/api/content/search?cql=${cql}&limit=${MAX_PAGES}&expand=version,body.atlas_doc_format,body.storage`
   );
   if (!response.ok) {
     return { pages: [], warnings: [safeError(response.status, 'Confluence source search')] };
@@ -41,11 +43,11 @@ export function analyze(sources, issues) {
   return { candidates, notice: truncated?.message ?? null };
 }
 
-/** Scans the 25 most recently updated issues of a project and the pages that mention its key. */
+/** Scans the 50 most recently updated issues of a project and the pages that mention its key. */
 export async function scanProject(projectKey) {
   const jql = `project = "${projectKey}" ORDER BY updated DESC`;
   const jiraResponse = await api.asUser().requestJira(
-    route`/rest/api/3/search/jql?jql=${jql}&maxResults=25&fields=${ISSUE_FIELDS}`
+    route`/rest/api/3/search/jql?jql=${jql}&maxResults=${MAX_ISSUES}&fields=${ISSUE_FIELDS}`
   );
   if (!jiraResponse.ok) return { ok: false, error: safeError(jiraResponse.status, 'Jira') };
   const rawIssues = (await jiraResponse.json()).issues ?? [];
@@ -54,7 +56,7 @@ export async function scanProject(projectKey) {
   const sources = [...pages, ...rawIssues.flatMap((issue) => issueSources(issue, projectKey))];
   const issueRecords = rawIssues.map((issue) => toIssueRecord(issue, projectKey));
   const { candidates, notice } = analyze(sources, issueRecords);
-  return { ok: true, rawIssues, pages, warnings, candidates, notice };
+  return { ok: true, rawIssues, pages, warnings, candidates, notice, sources, issueRecords };
 }
 
 /** Scans one issue and its project's pages, keeping only findings that point at that issue. */
@@ -65,9 +67,12 @@ export async function scanIssue(issueKey, projectKey) {
   const { pages, warnings } = await searchDecisionPages(projectKey);
 
   const sources = [...pages, ...issueSources(rawIssue, projectKey)];
-  const { candidates, notice } = analyze(sources, [toIssueRecord(rawIssue, projectKey)]);
+  const issueRecords = [toIssueRecord(rawIssue, projectKey)];
+  const { candidates, notice } = analyze(sources, issueRecords);
   return {
     ok: true,
+    sources,
+    issueRecords,
     rawIssue,
     pages,
     warnings,
