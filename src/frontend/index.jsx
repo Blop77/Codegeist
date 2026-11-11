@@ -9,12 +9,14 @@ import ForgeReconciler, {
   Spinner,
   Stack,
   Text,
-  Textfield
+  Textfield,
+  useProductContext
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
-import { CandidateCard, KIND_GROUPS } from './candidate-card';
+import { CandidateCard, KIND_GROUPS, siteLink } from './candidate-card';
 
 function App() {
+  const siteUrl = useProductContext()?.siteUrl;
   const [projectKey, setProjectKey] = useState('');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -120,6 +122,7 @@ function App() {
                   <CandidateCard
                     key={candidate.id}
                     candidate={candidate}
+                    siteUrl={siteUrl}
                     issueUrls={issueUrls}
                     onReview={(choice) => reviewCandidate(candidate, choice)}
                     reviewBusy={reviewBusyId === candidate.id}
@@ -135,11 +138,12 @@ function App() {
           ) : result.pages?.length > 0 ? (
             <Stack space="space.100">
               <Heading size="medium">Confluence pages mentioning {result.projectKey}</Heading>
-              {result.pages.map((source) => (
-                source.url
-                  ? <Link key={source.id} href={source.url}>{source.title}</Link>
-                  : <Text key={source.id}>{source.title}</Text>
-              ))}
+              {result.pages.map((source) => {
+                const href = siteLink(siteUrl, source.url);
+                return href
+                  ? <Link key={source.id} href={href}>{source.title}</Link>
+                  : <Text key={source.id}>{source.title}</Text>;
+              })}
             </Stack>
           ) : (
             <SectionMessage appearance="information" title="No matching Confluence pages found">
@@ -151,7 +155,7 @@ function App() {
               <Heading size="medium">Recent {result.projectKey} issues scanned · {result.issues.length}</Heading>
               {result.issues.map((issue) => (
                 <Text key={issue.key}>
-                  {issue.url ? <Link href={issue.url}>{issue.key}</Link> : issue.key}
+                  {siteLink(siteUrl, issue.url) ? <Link href={siteLink(siteUrl, issue.url)}>{issue.key}</Link> : issue.key}
                   {` · ${issue.status} · ${issue.summary}`}
                   {issue.labels.length > 0 ? ` · Labels: ${issue.labels.join(', ')}` : ''}
                 </Text>

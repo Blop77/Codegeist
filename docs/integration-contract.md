@@ -26,6 +26,8 @@ The Forge app uses Jira as its required product and Confluence as an optional co
 - `{ ok: true, issueKey, candidates: DecisionCandidate[], notice, warnings }`
 - `{ ok: false, error }`
 
+Jira links (`issues[].url` and the `url` of `jira_issue` / `jira_comment` sources) are site-relative paths such as `/browse/MC-1`, because inside Forge `issue.self` points at the API gateway (`api.atlassian.com/ex/jira/<cloudId>/…`), not the site. The UI prefixes `siteUrl` from its product context. Confluence links are absolute, built from the page's `_links.base`.
+
 `warnings` holds user-facing Confluence access problems. `notice` is set when candidates were truncated.
 
 The resolver does not write to Jira. `reviewDecision` and `clearDecisionReview` persist only a candidate's review status and timestamp in Forge storage; the key combines the project key and stable candidate ID. `reviewDecision` accepts only the `relevant` and `dismissed` states and requires an authenticated resolver account without storing the account ID. Both actions first confirm, as the signed-in user, that the user can see the Jira project (`GET /rest/api/3/project/{key}`); otherwise nothing is written. Scans read a project's reviews with one paginated prefix query (`review:<KEY>:`), and the issue panel reads reviews only for the candidates it shows. Jira updates remain a separate future action that must validate its target and require an explicit user action.

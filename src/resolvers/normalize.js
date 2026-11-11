@@ -115,23 +115,23 @@ export function storageToText(html) {
 // Records
 // ---------------------------------------------------------------------------
 
-export function siteOrigin(issue) {
-  try {
-    return issue?.self ? new URL(issue.self).origin : '';
-  } catch {
-    return '';
-  }
+/**
+ * Site-relative Jira issue link. Inside Forge, `issue.self` points at the API gateway
+ * (https://api.atlassian.com/ex/jira/<cloudId>/…), not the site, so links are emitted as
+ * `/browse/KEY` and the UI prefixes its own `siteUrl`.
+ */
+export function browsePath(issueKey) {
+  return `/browse/${issueKey}`;
 }
 
 /** Display record for the UI. */
 export function toIssueSummary(issue) {
-  const origin = siteOrigin(issue);
   return {
     key: issue.key,
     summary: issue.fields?.summary ?? 'Untitled issue',
     status: issue.fields?.status?.name ?? 'Unknown',
     labels: issue.fields?.labels ?? [],
-    url: origin ? `${origin}/browse/${issue.key}` : null,
+    url: browsePath(issue.key),
     updated: issue.fields?.updated ?? null
   };
 }
@@ -156,8 +156,7 @@ function authorName(user) {
 
 /** SourceRecords for an issue's description and its comments. */
 export function issueSources(issue, projectKey) {
-  const origin = siteOrigin(issue);
-  const browse = origin ? `${origin}/browse/${issue.key}` : `/browse/${issue.key}`;
+  const browse = browsePath(issue.key);
   const out = [];
 
   const description = adfToText(issue.fields?.description);

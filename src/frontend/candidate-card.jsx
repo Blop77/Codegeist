@@ -1,6 +1,17 @@
 import React from 'react';
 import { Button, Em, Inline, Link, Lozenge, Stack, Strong, Text } from '@forge/react';
 
+/**
+ * Absolute link for the current site. The resolver returns Jira links as site-relative paths
+ * (`/browse/MC-1`); Confluence links are already absolute. Returns null when no valid link exists.
+ */
+export function siteLink(siteUrl, url) {
+  if (!url) return null;
+  if (/^https:\/\//i.test(url)) return url;
+  if (url.startsWith('/') && siteUrl) return `${String(siteUrl).replace(/\/+$/, '')}${url}`;
+  return null;
+}
+
 export const KIND_GROUPS = [
   { kind: 'decision', title: 'Decisions' },
   { kind: 'open_question', title: 'Open questions' },
@@ -28,15 +39,16 @@ function sourceMeta(source) {
  * One extracted candidate with its evidence and the reasons behind every match.
  * `issueUrls` maps issue keys to links; `hideIssueKeys` skips the key on the issue panel.
  */
-export function CandidateCard({ candidate, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false }) {
+export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false }) {
   const kind = KIND_LABEL[candidate.kind] ?? KIND_LABEL.proposal;
   const { source } = candidate;
+  const sourceHref = siteLink(siteUrl, source.url);
 
   return (
     <Stack space="space.075">
       <Inline space="space.100" alignBlock="center">
         <Lozenge appearance={kind.appearance}>{kind.text}</Lozenge>
-        <Text>{source.url ? <Link href={source.url}>{source.title || 'Source'}</Link> : source.title}</Text>
+        <Text>{sourceHref ? <Link href={sourceHref}>{source.title || 'Source'}</Link> : source.title}</Text>
       </Inline>
       <Text><Strong>{candidate.summary}</Strong></Text>
       <Text><Em>“{candidate.evidence.quote}”</Em></Text>
@@ -79,9 +91,10 @@ export function CandidateCard({ candidate, issueUrls = {}, hideIssueKeys = false
           {candidate.affectedIssues.map((affected) => (
             <Stack key={affected.issueKey} space="space.025">
               <Text>
-                {hideIssueKeys ? 'Why this issue' : (issueUrls[affected.issueKey]
-                  ? <Link href={issueUrls[affected.issueKey]}>{affected.issueKey}</Link>
-                  : affected.issueKey)}
+                {hideIssueKeys ? 'Why this issue' : (() => {
+                  const href = siteLink(siteUrl, issueUrls[affected.issueKey] ?? `/browse/${affected.issueKey}`);
+                  return href ? <Link href={href}>{affected.issueKey}</Link> : affected.issueKey;
+                })()}
                 {` · relevance ${affected.relevance.toFixed(2)}`}
               </Text>
               {affected.reasons.map((reason) => <Text key={reason}>• {reason}</Text>)}

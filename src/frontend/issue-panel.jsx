@@ -80,6 +80,7 @@ function IssuePanel() {
         <CandidateCard
           key={candidate.id}
           candidate={candidate}
+          siteUrl={context?.siteUrl}
           hideIssueKeys
           onReview={(choice) => reviewCandidate(candidate, choice)}
           reviewBusy={reviewBusyId === candidate.id}
