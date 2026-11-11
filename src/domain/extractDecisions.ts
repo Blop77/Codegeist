@@ -32,7 +32,10 @@ const UNRESOLVED = [
   /\b(?:open question|tbd|to be (?:decided|determined|confirmed)|undecided|needs? to decide|pending (?:a )?decision|still deciding|not sure yet)\b/i,
 ];
 
-const EXPLICIT: Array<{ re: RegExp; confidence: number; reason: string }> = [
+const NEGATED_APPROVAL =
+  /\b(?:not|never|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't)\s+(?:(?:an?|been|yet|currently)\s+){0,2}(?:approved|signed off)\b/i;
+
+const EXPLICIT: Array<{ re: RegExp; confidence: number; reason: string; unless?: RegExp }> = [
   { re: /^\s*(?:final\s+)?decision\s*[:\-–]/i, confidence: 0.85, reason: 'Starts with a "Decision:" label' },
   { re: /^\s*(?:agreed|decided|resolved|outcome)\b[^.?!:]{0,40}:/i, confidence: 0.85, reason: 'Starts with an "Agreed:" or "Decided:" label' },
   {
@@ -43,7 +46,7 @@ const EXPLICIT: Array<{ re: RegExp; confidence: number; reason: string }> = [
   { re: /\b(?:decided|agreed)\s+(?:to|that|on)\b/i, confidence: 0.8, reason: 'Says something was decided or agreed' },
   { re: /\bfinal (?:call|decision)\b/i, confidence: 0.8, reason: 'Calls it a final decision' },
   { re: /\b(?:we(?:'ll| will| are|'re))\s+(?:going\s+(?:with|to go with)|go(?:ing)? with)\b/i, confidence: 0.65, reason: 'States what the team is going with' },
-  { re: /\b(?:approved|signed off)\b/i, confidence: 0.6, reason: 'Mentions an approval' },
+  { re: /\b(?:approved|signed off)\b/i, confidence: 0.6, reason: 'Mentions an approval', unless: NEGATED_APPROVAL },
   { re: /\bgoing forward\b/i, confidence: 0.6, reason: 'States a rule going forward' },
 ];
 
@@ -61,7 +64,7 @@ export const defaultClassifier: SentenceClassifier = (sentence, ctx) => {
   for (const re of UNRESOLVED) {
     if (re.test(sentence)) return { kind: 'open_question', confidence: 0.7, reasons: ['Says the decision is still open'] };
   }
-  const explicit = EXPLICIT.find((rule) => rule.re.test(sentence));
+  const explicit = EXPLICIT.find((rule) => rule.re.test(sentence) && !rule.unless?.test(sentence));
   if (explicit && !isQuestion) {
     const reasons = [explicit.reason];
     let confidence = explicit.confidence;
