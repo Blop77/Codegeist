@@ -37,6 +37,7 @@ function toFinding(candidate, origin) {
       title: candidate.source.title,
       link: link(origin, candidate.source.url),
       updated: candidate.source.updatedAt ? candidate.source.updatedAt.slice(0, 10) : null,
+      foundThrough: candidate.source.via ?? 'a search for the project key',
       author: candidate.source.author ?? null
     },
     wordingSignals: candidate.confidenceReasons,
@@ -89,7 +90,7 @@ export async function findProjectDecisions(payload) {
   const projectKey = projectKeyFrom(payload);
   if (!projectKey) return { ok: false, error: 'A valid Jira project key is needed, for example MC.' };
   try {
-    const scanned = await scanProject(projectKey);
+    const scanned = await scanProject(projectKey, { cloudId: payload?.context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
     return report({ projectKey }, scanned, siteOrigin(payload), { issuesScanned: scanned.rawIssues.length });
   } catch (error) {
@@ -102,7 +103,7 @@ export async function findIssueDecisions(payload) {
   const issueKey = issueKeyFrom(payload);
   if (!issueKey) return { ok: false, error: 'A valid Jira issue key is needed, for example MC-9.' };
   try {
-    const scanned = await scanIssue(issueKey, issueKey.split('-')[0]);
+    const scanned = await scanIssue(issueKey, issueKey.split('-')[0], { cloudId: payload?.context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
     return report({ issueKey }, scanned, siteOrigin(payload), {
       issueSummary: scanned.rawIssue.fields?.summary ?? null,

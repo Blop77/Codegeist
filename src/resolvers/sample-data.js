@@ -34,6 +34,7 @@ export const sampleSources = [
     'Attendees: Priya, Marcus, Lena, Tom',
     'Lena walked through deliverability numbers. Agreed: move the order confirmation email from the old mail relay to the new email service.',
     'We have not decided whether refunds need a second approver.',
+    'Marcus confirmed the team is locking in weekly payouts to merchants starting in January.',
     'Lunch orders for the offsite are due Friday.'
   ]),
   {
@@ -66,5 +67,6 @@ export const sampleIssues = [
   issue(103, 'Order confirmation email template', 'Build the template for the order confirmation email and send it through the old mail relay.', 'Blocked', '2026-10-30T09:00:00Z'),
   issue(104, 'Integrate the hosted payment form', 'Embed the hosted payment form in checkout.', 'In Progress', '2026-11-05T09:00:00Z'),
   issue(105, 'Update footer links on marketing site', 'Point the careers and press links at the new pages.', 'To Do', '2026-10-15T09:00:00Z'),
+  issue(106, 'Merchant payout schedule', 'Starting in January, send merchant payouts every day from the nightly settlement job.', 'To Do', '2026-10-29T09:00:00Z'),
   issue(107, 'Retry failed payment webhooks', 'Retry failed webhook deliveries up to 5 times with exponential backoff.', 'To Do', '2026-10-25T09:00:00Z')
 ];

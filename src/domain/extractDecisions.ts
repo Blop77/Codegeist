@@ -74,6 +74,14 @@ const PROPOSAL =
 
 const DECISION_QUESTION = /\b(?:should we|do we|are we|can we|will we|which|whether)\b/i;
 
+/** Lines that only point elsewhere ("Related Jira issues: MC-1, MC-5."), never a decision on their own. */
+const REFERENCE_LINE = /^\s*(?:related|linked|see(?: also)?|tracked in|tracking|references?|links?|jira(?: issues?| tickets?)?|issues?|tickets?|owners?|attendees|status)\b[^:]{0,30}:/i;
+
+/** Words in a sentence, not counting issue keys. */
+function contentWords(sentence: string): number {
+  return sentence.replace(/\b[A-Z][A-Z0-9]{1,9}-\d+\b/g, ' ').split(/\s+/).filter((w) => /[A-Za-z]{2,}/.test(w)).length;
+}
+
 /** The built-in rules. Exported so a custom classifier can fall back to them. */
 export const defaultClassifier: SentenceClassifier = (sentence, ctx) => {
   if (SELF_REFERENCE.some((re) => re.test(sentence))) return null;
@@ -100,8 +108,8 @@ export const defaultClassifier: SentenceClassifier = (sentence, ctx) => {
   if (PROPOSAL.test(sentence)) {
     return { kind: 'proposal', confidence: 0.6, reasons: ['Uses proposal wording such as "we should" or "probably"'] };
   }
-  if (ctx.underDecisionHeading && !isQuestion && sentence.trim().split(/\s+/).length >= 4) {
-    return { kind: 'decision', confidence: 0.6, reasons: ['Listed under a decisions heading'] };
+  if (ctx.decisionListItem && !isQuestion && !REFERENCE_LINE.test(sentence) && contentWords(sentence) >= 4) {
+    return { kind: 'decision', confidence: 0.6, reasons: ['Listed as an item under a Decisions heading'] };
   }
   return null;
 };
@@ -116,6 +124,8 @@ const BARE_HEADING =
 const LABEL_HEADING = /^\s*([^.!?:]{1,60}):\s*$/;
 const DECISION_HEADING = /\b(?:decisions?|decision log|outcomes?|agreed|agreements?|resolutions?|conclusions?)\b/i;
 const LIST_MARKER = /^\s*(?:[-*•‣◦]|\d{1,3}[.)]|\[[ xX]\])\s+/;
+/** Headings that only name a list of decisions. Prose under them, or under "Outcomes" or "Conclusion", is not assumed to be a decision. */
+const DECISION_LIST_HEADING = /^\s*(?:key\s+)?(?:decisions?|decision log|decisions made|decided|agreed|agreements?|resolutions?)\s*:?\s*$/i;
 
 interface Sentence {
   text: string;
@@ -153,8 +163,9 @@ function sentencesIn(text: string, from: number, to: number): Sentence[] {
 }
 
 /** Yields each sentence with whether it sits under a decisions heading. */
-function* walkSentences(text: string): Generator<Sentence & { underDecisionHeading: boolean }> {
+function* walkSentences(text: string): Generator<Sentence & { underDecisionHeading: boolean; decisionListItem: boolean }> {
   let underDecisionHeading = false;
+  let decisionListHeading = false;
   let lineStart = 0;
   while (lineStart <= text.length) {
     let lineEnd = text.indexOf('\n', lineStart);
@@ -163,10 +174,12 @@ function* walkSentences(text: string): Generator<Sentence & { underDecisionHeadi
     const heading = line.trim() ? headingOf(line) : null;
     if (heading !== null) {
       underDecisionHeading = DECISION_HEADING.test(heading);
+      decisionListHeading = DECISION_LIST_HEADING.test(heading);
     } else if (line.trim()) {
       const marker = LIST_MARKER.exec(line);
       const contentStart = lineStart + (marker ? marker[0].length : 0);
-      for (const s of sentencesIn(text, contentStart, lineEnd)) yield { ...s, underDecisionHeading };
+      const decisionListItem = decisionListHeading && marker !== null;
+      for (const s of sentencesIn(text, contentStart, lineEnd)) yield { ...s, underDecisionHeading, decisionListItem };
     }
     lineStart = lineEnd + 1;
   }
@@ -269,6 +282,7 @@ function validateSources(raw: unknown[], warnings: ExtractionWarning[]): SourceR
       updatedAt: typeof v.updatedAt === 'string' ? v.updatedAt : '',
     };
     if (typeof v.author === 'string') record.author = v.author;
+    if (typeof v.via === 'string' && v.via.trim()) record.via = v.via.trim().slice(0, 160);
     out.push(record);
   });
   return out;
@@ -346,7 +360,12 @@ function isSameStatement(a: Draft, b: Draft): boolean {
 function extractFromSource(source: SourceRecord, classify: SentenceClassifier): Draft[] {
   const drafts: Draft[] = [];
   for (const sentence of walkSentences(source.text)) {
-    const ctx: SentenceContext = { sourceType: source.type, sourceTitle: source.title, underDecisionHeading: sentence.underDecisionHeading };
+    const ctx: SentenceContext = {
+      sourceType: source.type,
+      sourceTitle: source.title,
+      underDecisionHeading: sentence.underDecisionHeading,
+      decisionListItem: sentence.decisionListItem,
+    };
     let cls: SentenceClassification | null;
     try {
       cls = classify(sentence.text, ctx);
@@ -451,6 +470,7 @@ export function extractDecisions(input: ExtractionInput, options: ExtractionOpti
           projectKey: source.projectKey,
           updatedAt: source.updatedAt,
           ...(source.author !== undefined ? { author: source.author } : {}),
+          ...(source.via !== undefined ? { via: source.via } : {}),
         },
         confidence: round2(Math.min(MAX_CONFIDENCE, confidence)),
         confidenceReasons: reasons,
@@ -482,4 +502,96 @@ export function extractDecisions(input: ExtractionInput, options: ExtractionOpti
     candidates.length = maxCandidates;
   }
   return { candidates, warnings };
+}
+
+// ---------------------------------------------------------------------------
+// Verifying findings proposed by a model (optional AI pass)
+// ---------------------------------------------------------------------------
+
+/** One finding a model proposes. Only `quote` is trusted, and only after it is found in the source. */
+export interface ProposedFinding {
+  sourceId: string;
+  quote: string;
+  kind: DecisionKind;
+  reason?: string;
+}
+
+export interface VerifiedFindings {
+  candidates: DecisionCandidate[];
+  /** Proposals dropped because the quote was not found verbatim, was too long, or was already found. */
+  rejected: number;
+}
+
+const KINDS = new Set<DecisionKind>(['decision', 'proposal', 'open_question']);
+const MAX_REASON_LENGTH = 160;
+
+/**
+ * Turns proposals from a model into candidates, keeping only those whose quote appears verbatim
+ * in the named source. Spans, ids and issue matching use the same rules as `extractDecisions`,
+ * so a verified finding is indistinguishable in shape from a rule-based one. `known` holds the
+ * candidates already found; proposals overlapping one of them are dropped. Pure and deterministic.
+ */
+export function verifyProposedFindings(
+  input: { sources: SourceRecord[]; issues: IssueRecord[] },
+  proposals: ProposedFinding[],
+  known: DecisionCandidate[] = [],
+): VerifiedFindings {
+  const warnings: ExtractionWarning[] = [];
+  const sources = new Map(validateSources(Array.isArray(input.sources) ? input.sources : [], warnings).map((s) => [s.id, s]));
+  const index = buildIssueIndex(validateIssues(Array.isArray(input.issues) ? input.issues : [], warnings));
+  const taken = new Map<string, Array<[number, number]>>();
+  for (const c of known) {
+    if (!taken.has(c.source.id)) taken.set(c.source.id, []);
+    taken.get(c.source.id)!.push([c.evidence.start, c.evidence.end]);
+  }
+
+  const candidates: DecisionCandidate[] = [];
+  let rejected = 0;
+  for (const p of Array.isArray(proposals) ? proposals : []) {
+    const source = isObject(p) ? sources.get(String(p.sourceId)) : undefined;
+    const quote = typeof p?.quote === 'string' ? p.quote.trim() : '';
+    if (!source || !KINDS.has(p.kind) || quote.length < 12 || quote.length > MAX_QUOTE_LENGTH) {
+      rejected++;
+      continue;
+    }
+    const start = source.text.indexOf(quote);
+    if (start === -1) {
+      rejected++;
+      continue;
+    }
+    const end = start + quote.length;
+    const spans = taken.get(source.id) ?? [];
+    if (spans.some(([a, b]) => start < b && end > a)) {
+      rejected++;
+      continue;
+    }
+    spans.push([start, end]);
+    taken.set(source.id, spans);
+
+    const summary = summarize(quote, false);
+    const reasons = ['Found by the AI pass; the quote was checked word for word against the source'];
+    const reason = typeof p.reason === 'string' ? p.reason.replace(/\s+/g, ' ').trim().slice(0, MAX_REASON_LENGTH) : '';
+    if (reason) reasons.push(`AI note: ${reason}`);
+    candidates.push({
+      id: stableId(source.id, summary),
+      kind: p.kind,
+      summary,
+      evidence: { quote, start, end },
+      source: {
+        id: source.id,
+        type: source.type,
+        title: source.title,
+        url: source.url,
+        projectKey: source.projectKey,
+        updatedAt: source.updatedAt,
+        ...(source.author !== undefined ? { author: source.author } : {}),
+          ...(source.via !== undefined ? { via: source.via } : {}),
+      },
+      confidence: 0.5,
+      confidenceReasons: reasons,
+      affectedIssues: matchIssues({ summary, quote, source, paragraph: paragraphAround(source.text, start, end) }, index),
+    });
+  }
+  candidates.sort((a, b) => KIND_ORDER[a.kind] - KIND_ORDER[b.kind] || Number(b.affectedIssues.length > 0) - Number(a.affectedIssues.length > 0));
+  return { candidates, rejected };
 }

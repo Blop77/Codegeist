@@ -227,7 +227,7 @@ export function confluencePath(webui) {
 }
 
 /** SourceRecord for a Confluence page found by the project-key search. */
-export function pageSource(page, projectKey) {
+export function pageSource(page, projectKey, via) {
   const adf = parseAdf(page.body?.atlas_doc_format?.value);
   const text = adf ? adfToText(adf) : storageToText(page.body?.storage?.value);
   return {
@@ -238,6 +238,7 @@ export function pageSource(page, projectKey) {
     text,
     projectKey,
     updatedAt: page.version?.when ?? '',
-    ...(authorName(page.version?.by) ? { author: authorName(page.version.by) } : {})
+    ...(authorName(page.version?.by) ? { author: authorName(page.version.by) } : {}),
+    ...(via ? { via } : {})
   };
 }

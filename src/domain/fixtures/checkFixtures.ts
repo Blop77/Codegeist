@@ -5,7 +5,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync, writeFileSync } from 'node:fs';
 import type { ExtractionInput, ExtractionResult, SentenceClassifier } from '../decisionTypes';
-import { defaultClassifier, extractDecisions, MAX_QUOTE_LENGTH } from '../extractDecisions';
+import { defaultClassifier, extractDecisions, MAX_QUOTE_LENGTH, verifyProposedFindings } from '../extractDecisions';
 import { demoInput } from './demoInput';
 import { emptyInput, longSentence, malformedInput } from './edgeCases';
 import { mcDemoInput } from './mcDemoInput';
@@ -261,6 +261,47 @@ check('MC demo: one decision, no disclaimer, MC-9 flagged as drift, listed issue
   // Drift: MC-9 still describes the plan the decision replaces, so it ranks first.
   assert.equal(keys[0], 'MC-9');
   assert.ok(c.affectedIssues[0].reasons.includes('The issue still mentions “separate channel plans”, which this decision replaces'));
+});
+
+check('reference lines under a decisions heading are not decisions', () => {
+  const heading = { sourceType: 'confluence_page' as const, sourceTitle: 'Launch sync', underDecisionHeading: true, decisionListItem: true };
+  for (const sentence of ['Related Jira issues: MC-1, MC-5, MC-9, MC-10.', 'See also: PAY-101 and PAY-104.', 'Owners: Priya and Marcus.', 'MC-1, MC-5, MC-9 and MC-10.']) {
+    assert.equal(defaultClassifier(sentence, heading), null, sentence);
+  }
+  assert.equal(defaultClassifier('Social posts go live after the website update.', heading)?.kind, 'decision');
+});
+
+check('AI proposals are kept only when the quote is verbatim, new and well formed', () => {
+  const page = mcDemoInput.sources[0];
+  const known = extractDecisions(mcDemoInput).candidates;
+  const indirect = 'Status: Demo example only.';
+  const r = verifyProposedFindings(mcDemoInput, [
+    { sourceId: page.id, quote: indirect, kind: 'decision', reason: 'states the page status' },
+    { sourceId: page.id, quote: 'We agreed to use one shared launch plan for every channel.', kind: 'decision' },
+    { sourceId: page.id, quote: known[0].evidence.quote, kind: 'decision' },
+    { sourceId: 'no-such-source', quote: indirect, kind: 'decision' },
+    { sourceId: page.id, quote: indirect, kind: 'verdict' as never },
+    { sourceId: page.id, quote: 'Status:', kind: 'decision' },
+  ], known);
+  assert.equal(r.candidates.length, 1);
+  assert.equal(r.rejected, 5);
+  const [c] = r.candidates;
+  assert.equal(page.text.slice(c.evidence.start, c.evidence.end), indirect);
+  assert.match(c.id, /^dc_[a-f0-9]{16}$/);
+  assert.ok(c.confidenceReasons[0].startsWith('Found by the AI pass'));
+  assert.ok(c.confidenceReasons.includes('AI note: states the page status'));
+  assert.deepEqual(verifyProposedFindings(mcDemoInput, r.candidates.map((x) => ({ sourceId: x.source.id, quote: x.evidence.quote, kind: x.kind })), [...known, ...r.candidates]).candidates, []);
+  assert.deepEqual(verifyProposedFindings(mcDemoInput, 'nonsense' as never).candidates, []);
+});
+
+check('only list items under a Decisions heading fall back to decisions', () => {
+  const run = (text: string) => extractDecisions({ sources: [{ id: 's', type: 'confluence_page', title: 'DACI: Enablement approach', url: '', text, projectKey: 'PAY', updatedAt: '2026-11-01T00:00:00Z' }], issues: [] }).candidates;
+  // Template prose under decision-like headings is not a decision.
+  assert.deepEqual(run(['## Decision', 'This document outlines the decision-making process for training options.', '## Outcomes', 'An hour ago, you felt the project was going along just fine.', '## Conclusion', 'Key factors include cost, speed of onboarding, and quality.'].join('\n')), []);
+  // A bulleted item under "Decisions" still counts.
+  const items = run(['## Decisions', '- Virtual async training for all new hires from January.', 'Prose under the heading is ignored for now.'].join('\n'));
+  assert.equal(items.length, 1);
+  assert.equal(items[0].summary, 'Virtual async training for all new hires from January.');
 });
 
 if (failures > 0) {

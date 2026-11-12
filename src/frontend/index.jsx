@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
   Button,
+  Em,
   Heading,
   Inline,
   Label,
@@ -27,10 +28,13 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [reviewBusyId, setReviewBusyId] = useState(null);
   const [reviewError, setReviewError] = useState(null);
+  const [aiResult, setAiResult] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const scan = async (key = projectKey) => {
     setLoading(true);
     setResult(null);
+    setAiResult(null);
     setReviewError(null);
     try {
       setResult(await invoke('getProjectRadar', { projectKey: key }));
@@ -45,6 +49,7 @@ function App() {
   const scanSample = async () => {
     setLoading(true);
     setResult(null);
+    setAiResult(null);
     setReviewError(null);
     try {
       setResult(await invoke('getSampleRadar'));
@@ -52,6 +57,22 @@ function App() {
       setResult({ ok: false, error: 'The sample scan failed. Refresh the page and try again.' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Asks the AI for decisions the wording rules missed. Only on request: usage is billed per call.
+  const findWithAi = async () => {
+    if (!result?.ok) return;
+    setAiLoading(true);
+    setAiResult(null);
+    try {
+      setAiResult(result.sample
+        ? await invoke('getSampleAiFindings')
+        : await invoke('getAiFindings', { projectKey: result.projectKey }));
+    } catch {
+      setAiResult({ ok: false, error: 'The AI pass could not complete. The findings above are unaffected.' });
+    } finally {
+      setAiLoading(false);
     }
   };
 
@@ -83,7 +104,10 @@ function App() {
   const applyNote = async (candidate, issueKey, note) => {
     try {
       const response = await invoke('applyDecisionNote', notePayload(candidate, siteUrl, issueKey, note));
-      if (response?.ok) setResult((current) => withNote(current, candidate.id, issueKey, response.note));
+      if (response?.ok) {
+        setResult((current) => withNote(current, candidate.id, issueKey, response.note));
+        setAiResult((current) => current?.ok ? withNote(current, candidate.id, issueKey, response.note) : current);
+      }
       return response;
     } catch {
       return { ok: false, error: `Could not add the note. Open ${issueKey} to check whether the comment was posted before trying again.` };
@@ -91,6 +115,15 @@ function App() {
   };
 
   const issueUrls = Object.fromEntries((result?.issues ?? []).filter((i) => i.url).map((i) => [i.key, i.url]));
+
+  // A finding can appear in the scan or in the AI pass; keep both lists in step.
+  const updateCandidate = (id, change) => {
+    const apply = (current) => current?.candidates
+      ? { ...current, candidates: current.candidates.map((item) => (item.id === id ? change(item) : item)) }
+      : current;
+    setResult(apply);
+    setAiResult(apply);
+  };
 
   const reviewCandidate = async (candidate, choice) => {
     setReviewBusyId(candidate.id);
@@ -103,12 +136,7 @@ function App() {
         setReviewError(response?.error ?? 'Could not save the review. Try again.');
         return;
       }
-      setResult((current) => current && ({
-        ...current,
-        candidates: current.candidates.map((item) => (
-          item.id === candidate.id ? { ...item, review: response.review ?? null } : item
-        ))
-      }));
+      updateCandidate(candidate.id, (item) => ({ ...item, review: response.review ?? null }));
     } catch {
       setReviewError('Could not save the review. Check your connection and try again.');
     } finally {
@@ -183,6 +211,14 @@ function App() {
             Scanned {result.issues.length} {result.sample ? 'sample' : `recent ${result.projectKey}`} issues and {result.pages?.length ?? 0}
             {result.sample ? ' sample' : ''} Confluence{result.pages?.length === 1 ? ' page' : ' pages'}{result.sample ? '.' : ` mentioning ${result.projectKey}.`}
           </Text>
+          {result.graph?.used && result.graph.teams.length > 0 && (
+            <SectionMessage appearance="discovery" title="Context from Teamwork Graph">
+              Teams linked to {result.projectKey}: {result.graph.teams.join(', ')}.
+              {result.graph.spaces.length > 0 ? ` Their Confluence spaces: ${result.graph.spaces.join(', ')}.` : ''}
+              {` Added ${result.graph.pagesAdded} decision ${result.graph.pagesAdded === 1 ? 'page' : 'pages'} from those spaces and ${result.graph.linkedPagesAdded} linked ${result.graph.linkedPagesAdded === 1 ? 'page' : 'pages'} that do not mention ${result.projectKey}.`}
+            </SectionMessage>
+          )}
+          {result.graph?.note && !result.sample && <Text><Em>{result.graph.note}</Em></Text>}
           {result.issues.length === 0 && (
             <SectionMessage appearance="warning" title={`No issues found in ${result.projectKey}`}>
               Check the project key, or pick a project with issues. Findings can still come from Confluence pages, but no
@@ -218,18 +254,61 @@ function App() {
               </Stack>
             );
           })}
+          <Stack space="space.150">
+            <Heading size="medium">AI pass</Heading>
+            <Text>
+              The findings above come from explicit wording rules. The AI pass asks an Atlassian-hosted model for
+              decisions phrased indirectly, then keeps only those whose quote is found word for word in the source.
+              It runs only when you ask{result.sample ? ', and reads nothing from your site' : ''}.
+            </Text>
+            <Inline>
+              <Button appearance="default" onClick={findWithAi} isDisabled={aiLoading || loading}>
+                {aiLoading ? 'Asking the AI…' : 'Find more with AI'}
+              </Button>
+            </Inline>
+            {aiLoading && <Inline space="space.100"><Spinner /><Text>Reading {result.sample ? 'the sample' : 'your'} pages and issues…</Text></Inline>}
+            {aiResult && !aiResult.ok && <SectionMessage appearance="warning" title="AI pass not run">{aiResult.error}</SectionMessage>}
+            {aiResult?.ok && aiResult.candidates.length === 0 && (
+              <SectionMessage appearance="information" title="Nothing more found">
+                The AI found no further decisions with a quote it could match to the source.
+              </SectionMessage>
+            )}
+            {aiResult?.ok && aiResult.candidates.length > 0 && (
+              <Stack space="space.200">
+                <Text>
+                  {aiResult.candidates.length} more {aiResult.candidates.length === 1 ? 'finding' : 'findings'}, each with a
+                  quote checked against its source.{aiResult.rejected > 0 ? ` ${aiResult.rejected} AI suggestions were dropped because their quote did not match the source.` : ''}
+                </Text>
+                {aiResult.candidates.map((candidate) => (
+                  <CandidateCard
+                    key={candidate.id}
+                    candidate={candidate}
+                    siteUrl={siteUrl}
+                    issueUrls={issueUrls}
+                    sample={Boolean(result.sample)}
+                    onReview={result.sample ? undefined : (choice) => reviewCandidate(candidate, choice)}
+                    reviewBusy={reviewBusyId === candidate.id}
+                    onApplyNote={result.sample ? undefined : (issueKey, note) => applyNote(candidate, issueKey, note)}
+                  />
+                ))}
+              </Stack>
+            )}
+          </Stack>
           {result.warnings?.length > 0 ? (
             <SectionMessage appearance="warning" title="Confluence source search unavailable">
               {result.warnings.join(' ')} Jira descriptions and comments were still scanned.
             </SectionMessage>
           ) : result.pages?.length > 0 ? (
             <Stack space="space.100">
-              <Heading size="medium">{result.sample ? 'Sample Confluence pages' : `Confluence pages mentioning ${result.projectKey}`}</Heading>
+              <Heading size="medium">{result.sample ? 'Sample Confluence pages' : `Confluence pages scanned for ${result.projectKey}`}</Heading>
               {result.pages.map((source) => {
                 const href = siteLink(siteUrl, source.url);
-                return href
-                  ? <Link key={source.id} href={href}>{source.title}</Link>
-                  : <Text key={source.id}>{source.title}</Text>;
+                return (
+                  <Text key={source.id}>
+                    {href ? <Link href={href}>{source.title}</Link> : source.title}
+                    {source.via ? ` · found through ${source.via}` : ''}
+                  </Text>
+                );
               })}
             </Stack>
           ) : (

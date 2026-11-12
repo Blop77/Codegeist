@@ -20,6 +20,8 @@ export interface SourceRecord {
   /** ISO 8601. A malformed value produces a warning, not a failure. */
   updatedAt: string;
   author?: string;
+  /** How the source was found, when not by the plain project-key search, e.g. "Teamwork Graph: space of team Marketing". */
+  via?: string;
 }
 
 export interface IssueRecord {
@@ -57,6 +59,8 @@ export interface CandidateSource {
   /** As given in the input, even when malformed (a warning is raised in that case). */
   updatedAt: string;
   author?: string;
+  /** How the source was found, when not by the plain project-key search, e.g. "Teamwork Graph: space of team Marketing". */
+  via?: string;
 }
 
 export interface AffectedIssue {
@@ -129,6 +133,8 @@ export interface SentenceContext {
   sourceTitle: string;
   /** True when the sentence sits under a heading such as "Decisions". */
   underDecisionHeading: boolean;
+  /** True when the sentence is a list item under a heading that only names decisions ("Decisions", "Decision log", "Agreed"). */
+  decisionListItem?: boolean;
 }
 
 /**

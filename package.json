@@ -10,6 +10,7 @@
   "dependencies": {
     "@forge/api": "^6.0.0",
     "@forge/bridge": "^4.0.0",
+    "@forge/llm": "^1.0.10",
     "@forge/react": "^11.0.0",
     "@forge/resolver": "^1.6.0"
   }
