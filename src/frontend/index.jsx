@@ -234,6 +234,17 @@ function App() {
             Scanned {result.issues.length} {result.sample ? 'sample' : `recent ${result.projectKey}`} issues and {result.pages?.length ?? 0}
             {result.sample ? ' sample' : ''} Confluence{result.pages?.length === 1 ? ' page' : ' pages'}.
           </Text>
+          {result.radar && (
+            <SectionMessage appearance="information" title="Radar">
+              {`${result.radar.findings} ${result.radar.findings === 1 ? 'finding' : 'findings'}`}
+              {result.previousVisitAt
+                ? ` · ${result.radar.newSinceLastVisit} new since your last visit (${new Date(result.previousVisitAt).toLocaleDateString()})`
+                : ' · first visit: later scans will mark new findings'}
+              {` · ${result.radar.drifting} ${result.radar.drifting === 1 ? 'issue' : 'issues'} still drifting · ${result.radar.resolved} resolved.`}
+              {' Drift is marked resolved when the issue stops using the replaced wording, on the next scan or as soon as the issue is edited.'}
+            </SectionMessage>
+          )}
+          {result.radarWarning && <SectionMessage appearance="warning" title="Drift history unavailable">{result.radarWarning}</SectionMessage>}
           {result.graph?.used && result.graph.teams.length > 0 && (
             <SectionMessage appearance="discovery" title={result.sample ? 'Context from Teamwork Graph (sample)' : 'Context from Teamwork Graph'}>
               Teams linked to {result.projectKey}: {result.graph.teams.join(', ')}.

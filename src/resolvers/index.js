@@ -5,6 +5,7 @@ import { analyze, resolveFindingForIssue, safeError, scanIssue, scanProject, val
 import { SAMPLE_GRAPH, SAMPLE_PROJECT_KEY, sampleIssues, sampleSources } from './sample-data';
 import { draftNoteWithAi, findWithAi } from './ai';
 import { confirmRovoDraft, loadRovoDraft } from './rovo-drafts';
+import { lastVisit, saveVisit, trackScan } from './drift';
 import {
   attachReviewState, canAccessProject, MAX_NOTE_LENGTH, noteEvidence, noteProblem, postNote, reviewKey, validReviewTarget
 } from './notes';
@@ -28,8 +29,15 @@ resolver.define('getProjectRadar', async ({ payload, context }) => {
     if (!scanned.ok) return { ok: false, error: scanned.error };
     const { rawIssues, pages, warnings, candidates: extractedCandidates, notice, graph } = scanned;
     const { candidates: reviewed, reviewWarning } = await attachReviewState(projectKey, [...extractedCandidates, ...scanned.aiCandidates]);
-    const candidates = reviewed.slice(0, extractedCandidates.length);
-    const aiCandidates = reviewed.slice(extractedCandidates.length);
+    const previousVisitAt = await lastVisit(context?.accountId, projectKey);
+    const tracked = await trackScan(projectKey, {
+      candidates: reviewed,
+      scannedIssueKeys: rawIssues.map((issue) => issue.key),
+      previousVisitAt
+    });
+    await saveVisit(context?.accountId, projectKey);
+    const candidates = tracked.candidates.slice(0, extractedCandidates.length);
+    const aiCandidates = tracked.candidates.slice(extractedCandidates.length);
 
     return {
       ok: true,
@@ -42,7 +50,10 @@ resolver.define('getProjectRadar', async ({ payload, context }) => {
       warnings,
       graph,
       aiCandidates,
-      aiSavedAt: aiCandidates.length > 0 ? scanned.aiSavedAt : null
+      aiSavedAt: aiCandidates.length > 0 ? scanned.aiSavedAt : null,
+      radar: tracked.summary,
+      radarWarning: tracked.radarWarning,
+      previousVisitAt
     };
   } catch (error) {
     console.error('Decision Drift Radar project scan failed', error);
@@ -60,9 +71,13 @@ resolver.define('getIssueDecisionContext', async ({ payload, context }) => {
     const scanned = await scanIssue(issueKey, projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
     const { warnings, candidates: forIssue, notice, graph } = scanned;
-    const { candidates, reviewWarning } = await attachReviewState(projectKey, [...forIssue, ...scanned.aiCandidates]);
+    const { candidates: reviewed, reviewWarning } = await attachReviewState(projectKey, [...forIssue, ...scanned.aiCandidates]);
+    const tracked = await trackScan(projectKey, { candidates: reviewed, scannedIssueKeys: [scanned.rawIssue.key] });
 
-    return { ok: true, issueKey, candidates, notice, reviewWarning, warnings, graph };
+    return {
+      ok: true, issueKey, candidates: tracked.candidates, notice, reviewWarning, warnings, graph,
+      radarWarning: tracked.radarWarning
+    };
   } catch (error) {
     console.error('Decision Drift Radar issue context failed', error);
     return { ok: false, error: 'Could not load decision context for this issue.' };

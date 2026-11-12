@@ -91,6 +91,13 @@ modules:
           type: string
           required: false
           description: Two or three plain sentences based only on the finding - what was decided, what in the issue looks out of date, what to update. The app adds the quote and source link below it. Leave empty for the app's standard note.
+  trigger:
+    - key: drift-watch
+      function: watchIssueUpdates
+      events:
+        - avi:jira:updated:issue
+      filter:
+        ignoreSelf: true
   llm:
     - key: decision-drift-radar-llm
       model:
@@ -106,6 +113,8 @@ modules:
       handler: index.findMoreDecisionsWithAi
     - key: prepareDecisionNote
       handler: index.prepareDecisionNote
+    - key: watchIssueUpdates
+      handler: index.watchIssueUpdates
 resources:
   - key: main
     path: src/frontend/index.jsx

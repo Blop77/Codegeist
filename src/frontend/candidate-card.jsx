@@ -181,6 +181,25 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onDraftNote }) 
  * is marked relevant. `onDraftNote(issueKey)` asks the AI for a draft the person then edits. `sample` marks a finding from the bundled sample project: it has no
  * links on this site and cannot be reviewed.
  */
+const shortDate = (value) => (value ? new Date(value).toLocaleDateString() : '');
+
+/** One line on whether the issue still uses the replaced wording, from the radar's history. */
+function DriftLine({ drift }) {
+  if (!drift) return null;
+  if (drift.status === 'resolved') {
+    return (
+      <Inline space="space.100" alignBlock="center">
+        <Lozenge appearance="success">Resolved</Lozenge>
+        <Text>
+          No longer mentions “{drift.phrase}” · {shortDate(drift.resolvedAt)}
+          {drift.resolvedBy === 'issue-update' ? ' · noticed when the issue was edited' : ' · found by a later scan'}
+        </Text>
+      </Inline>
+    );
+  }
+  return <Text><Em>Drifting since {shortDate(drift.firstSeenAt)}: the issue still says “{drift.phrase}”.</Em></Text>;
+}
+
 export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false, onApplyNote, onDraftNote, sample = false }) {
   const kind = KIND_LABEL[candidate.kind] ?? KIND_LABEL.proposal;
   const { source } = candidate;
@@ -192,6 +211,7 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
       <Inline space="space.100" alignBlock="center">
         <Lozenge appearance={kind.appearance}>{kind.text}</Lozenge>
         {candidate.ai && <Lozenge appearance="new">Found by AI</Lozenge>}
+        {candidate.isNew && <Lozenge appearance="inprogress">New since your last visit</Lozenge>}
         <Text>{sourceHref ? <Link href={sourceHref}>{source.title || 'Source'}</Link> : source.title}</Text>
       </Inline>
       <Text><Strong>{candidate.summary}</Strong></Text>
@@ -236,14 +256,19 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
           {!hideIssueKeys && <Text><Strong>May affect</Strong></Text>}
           {candidate.affectedIssues.map((affected) => (
             <Stack key={affected.issueKey} space="space.025">
-              <Text>
-                {hideIssueKeys ? 'Why this issue' : (() => {
-                  const href = sample ? null : siteLink(siteUrl, issueUrls[affected.issueKey] ?? `/browse/${affected.issueKey}`);
-                  return href ? <Link href={href}>{affected.issueKey}</Link> : affected.issueKey;
-                })()}
-                {` · relevance ${affected.relevance.toFixed(2)}`}
-              </Text>
+              <Inline space="space.100" alignBlock="center">
+                <Text>
+                  {hideIssueKeys ? 'Why this issue' : (() => {
+                    const href = sample ? null : siteLink(siteUrl, issueUrls[affected.issueKey] ?? `/browse/${affected.issueKey}`);
+                    return href ? <Link href={href}>{affected.issueKey}</Link> : affected.issueKey;
+                  })()}
+                  {` · relevance ${affected.relevance.toFixed(2)}`}
+                </Text>
+                {affected.wordingStatus === 'outdated' && <Lozenge appearance="moved">Outdated wording found</Lozenge>}
+                {affected.wordingStatus === 'replacement-found' && <Lozenge appearance="success">Replacement wording found</Lozenge>}
+              </Inline>
               {affected.reasons.map((reason) => <Text key={reason}>• {reason}</Text>)}
+              <DriftLine drift={affected.drift} />
               {(canNote || candidate.notes?.[affected.issueKey]) && (
                 <NoteAction candidate={candidate} issueKey={affected.issueKey} siteUrl={siteUrl} onApplyNote={onApplyNote} onDraftNote={onDraftNote} />
               )}
@@ -252,6 +277,20 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
         </Stack>
       ) : (
         <Text>No Jira issue in this project clearly points at this. Review it manually.</Text>
+      )}
+      {(candidate.resolvedIssues ?? []).length > 0 && (
+        <Stack space="space.050">
+          <Text><Strong>Resolved since it was found</Strong></Text>
+          {candidate.resolvedIssues.map((resolved) => {
+            const href = sample ? null : siteLink(siteUrl, issueUrls[resolved.issueKey] ?? `/browse/${resolved.issueKey}`);
+            return (
+              <Stack key={resolved.issueKey} space="space.025">
+                <Text>{href ? <Link href={href}>{resolved.issueKey}</Link> : resolved.issueKey}</Text>
+                <DriftLine drift={resolved} />
+              </Stack>
+            );
+          })}
+        </Stack>
       )}
     </Stack>
   );

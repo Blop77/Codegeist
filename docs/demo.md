@@ -9,8 +9,8 @@ How the hackathon demo is set up, how to run it, and what it does and does not s
 | Demo site | `one-atlas-pxox.atlassian.net`, a Forge demo site active until 2027-02-09 |
 | Installation | One development installation covering **Jira (required)** and **Confluence**, major version 6, up to date (`forge install list`) |
 | Other site | `decitrace.atlassian.net` is still on major version 2. Forge classifies it as a production site, so it is deliberately not upgraded with development builds. |
-| Development | Version **6.3.0**, verified live on project `MC` (12 Nov 2026): 4 decisions and 2 open questions, including one decision found only through Teamwork Graph; the AI pass; reviews and notes; the sample data; and the Rovo agent. |
-| Production | Version **3.0.0**, installed on `jiggzer.atlassian.net` for the judge-path check; shared by the existing installation link. |
+| Development | Version **6.7.0**, checked on the demo site. Rovo prepared a draft, and a teammate previewed and posted the exact comment from the Jira issue panel. |
+| Production | Version **3.3.0**, checked on `jiggzer.atlassian.net` with the existing installation link. The live scan found a decision page through Teamwork Graph without a project key in the page, and a reviewed note posted once to the affected issue. |
 
 Version 4 added the `write:jira-work` scope for the note action, so the installation was upgraded to grant it.
 
@@ -42,11 +42,10 @@ After later changes, deploy to production again. Reviewers who already installed
    - **MC launch sync: decisions**: "use one shared launch plan instead of separate channel plans" → **MC-9** (0.99): the issue still mentions "separate channel plans".
    - **MC launch sync: decisions**: "Product documentation is out of scope for launch week" → **MC-8** (0.99): the issue still mentions "Product documentation".
    - Open question: "Do we need a legal review of the email copy before launch?"
-   - The existing EO test **Decision log** in the same Marketing space adds one decision and one open question through Graph discovery. The full baseline on this shared demo therefore shows **4 decisions and 2 open questions**, not just the three marketing decisions.
 5. Select **Find more with AI**. Timing varies; allow roughly 30–60 seconds. It adds one finding labelled **Found by AI**: "After the review, the team is going ahead with Tuesday-only sends for the email campaign." → MC-9.
 6. Select **Mark relevant** on a finding, then **Add note to …**, edit the note and **Post comment**. MC-9 already has a note from testing, so post to MC-10 or MC-8 in a demo.
 7. Open the issue: its **Decision Drift Radar** panel shows the baseline decision, the review and the note. Verified AI-pass findings are saved for the project, so the panel (and the Rovo agent) show them too, re-checked against the current source text without a model call.
-8. On MC-9, open **Rovo Chat**, choose the **Decision Drift Radar** agent, and select **Which decisions may affect this issue?** Then ask it to draft a note for an affected issue that has none yet (MC-1, MC-5 or MC-10): it shows the exact comment and posts it only after you say yes.
+8. On MC-9, open **Rovo Chat**, choose the **Decision Drift Radar** agent, and select **Which decisions may affect this issue?** Ask it to draft a note for an affected issue without a posted note. Open that issue’s **Decision Drift Radar** panel, select **Load Rovo draft**, review the exact comment, then choose **Post Rovo draft** in Jira.
 
 ## Sample data and its limits
 
@@ -55,9 +54,9 @@ After later changes, deploy to production again. Reviewers who already installed
   - **Social calendar: decisions**: one decision; it does not mention MC, so only Teamwork Graph finds it.
 - Demo lines added to issue descriptions: MC-9 ("the email campaign keeps separate channel plans…") and MC-10 ("Scheduling: social posts go live on the same day as the website update.").
 - Teamwork Graph link: the existing **Marketing** team was linked to the MC Jira space and to the Marketing Confluence space (team profile → Team links).
-- Test data from the judge-path checks also exists: the EO project's "Decision log" page (in MAR, so Teamwork Graph finds it), EO-1's extra line, and test comments on MC-9 and EO-1.
+- The EO test page was moved to the trash before recording so it no longer adds findings to the MC demo. Test issues and comments from earlier verification may still be present.
 - The "still mentions" signal reads what a decision replaces from the decision sentence itself ("X instead of Y"), so the old plan must be named in that sentence, and the issue must use the same phrase.
 - `src/domain/fixtures/mcDemoInput.ts` captures an earlier MC demo state, with 25 issue titles and MC-9's description. It is a regression fixture, not a snapshot of the current Graph-expanded live demo. Live content and shared-term scores can differ.
-- MC-9 carries one comment posted by the app during verification on 2026-11-11 ("Decision Drift Radar note"). Because that note is recorded, the app shows "Note added to MC-9" and suppresses another post in the normal workflow. This is not an atomic exactly-once guarantee for simultaneous requests or a failed receipt write. To demo posting live, add a note to another listed issue (MC-1, MC-5 or MC-10).
+- MC-9 carries one comment posted by the app during verification on 2026-11-11 ("Decision Drift Radar note"). The app shows "Note added to MC-9" and uses the reservation and receipt to prevent repeat posting. To demo posting live, add a note to another listed issue (MC-1, MC-5 or MC-10).
 - Text-search discovery uses the project key. Teamwork Graph can additionally discover decision pages in linked team spaces and linked pages without `MC` in their text. Indexing may lag; if a fresh scan reports no linked space, allow indexing time and retry.
 - `KAN`, the old default key, has no issues on the demo site.
