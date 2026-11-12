@@ -11,6 +11,8 @@ const SITE = 'https://example.atlassian.net';
 const { applyScan, describeFindings, onIssueUpdated } = await import('../src/resolvers/drift.js');
 const { handler } = await import('../src/resolvers/index.js');
 const { kvsMemory } = await import('./mocks/kvs.mjs');
+/** The stored radar for a project (versioned custom-entity record). */
+const storedRadar = (projectKey: string) => kvsMemory.get(`radar-state:${projectKey}`)?.radar;
 
 const t = (text: string) => ({ type: 'text', text });
 const doc = (lines: string[]) => ({ type: 'doc', content: lines.map((line) => ({ type: 'paragraph', content: [t(line)] })) });
@@ -141,7 +143,7 @@ test('the issue-update trigger resolves a drift once the wording is gone, readin
   pages = pages.slice(0, 1);
   description = ['Scheduling: this work keeps separate channel plans for now.'];
   await scan();
-  assert.equal(Object.values(kvsMemory.get('radar:DD').drifts).filter((d: any) => d.status === 'open').length, 1);
+  assert.equal(Object.values(storedRadar('DD').drifts).filter((d: any) => d.status === 'open').length, 1);
 
   jiraCalls.length = 0;
   const statusOnly = await onIssueUpdated({ issue: { key: 'DD-1', fields: { project: { key: 'DD' } } }, changelog: { items: [{ field: 'status', fieldId: 'status' }] } });
@@ -165,7 +167,7 @@ test('the issue-update trigger resolves a drift once the wording is gone, readin
   const fixed = await onIssueUpdated(descriptionEdit);
   assert.deepEqual(fixed, { checked: 1, resolved: 1 });
   assert.deepEqual([...jiraCalls], [{ path: '/rest/api/3/issue/DD-1?fields=summary,description', asApp: true }]);
-  const drift: any = Object.values(kvsMemory.get('radar:DD').drifts)[0];
+  const drift: any = Object.values(storedRadar('DD').drifts)[0];
   assert.equal(drift.status, 'resolved');
   assert.equal(drift.resolvedBy, 'issue-update');
 
@@ -176,7 +178,7 @@ test('the issue-update trigger resolves a drift once the wording is gone, readin
 test('the radar never blocks a scan when its record cannot be read', async () => {
   const kvsModule: any = await import('./mocks/kvs.mjs');
   const get = kvsModule.kvs.get;
-  kvsModule.kvs.get = async (key: string) => { if (key.startsWith('radar:')) throw new Error('storage down'); return get(key); };
+  kvsModule.kvs.get = async (key: string) => { if (key.startsWith('radar-state:')) throw new Error('storage down'); return get(key); };
   try {
     const result = await scan();
     assert.equal(result.ok, true);

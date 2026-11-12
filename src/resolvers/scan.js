@@ -59,6 +59,8 @@ async function projectPages(projectKey, projectId, cloudId) {
  * earlier AI passes are re-checked against these sources and returned as `aiCandidates`.
  */
 export async function scanProject(projectKey, { cloudId } = {}) {
+  // When the issue text was read: the radar orders observations by it.
+  const readAt = new Date().toISOString();
   const jql = `project = "${projectKey}" ORDER BY updated DESC`;
   const jiraResponse = await api.asUser().requestJira(
     route`/rest/api/3/search/jql?jql=${jql}&maxResults=${MAX_ISSUES}&fields=${ISSUE_FIELDS}`
@@ -73,13 +75,14 @@ export async function scanProject(projectKey, { cloudId } = {}) {
   const { candidates, notice } = analyze(sources, issueRecords);
   const ai = await savedAiCandidates({ projectKey, sources, issues: issueRecords, known: candidates });
   return {
-    ok: true, rawIssues, pages, warnings, candidates, notice, sources, issueRecords, graph,
+    ok: true, rawIssues, pages, warnings, candidates, notice, sources, issueRecords, graph, readAt,
     aiCandidates: ai.candidates, aiSavedAt: ai.savedAt
   };
 }
 
 /** Scans one issue and its project's pages, keeping only findings that point at that issue. */
 export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
+  const readAt = new Date().toISOString();
   const issueResponse = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}?fields=${ISSUE_FIELDS}`);
   if (!issueResponse.ok) return { ok: false, error: safeError(issueResponse.status, 'Jira issue lookup') };
   const rawIssue = await issueResponse.json();
@@ -92,6 +95,7 @@ export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
   const pointsHere = (c) => c.affectedIssues.some((a) => a.issueKey === rawIssue.key);
   return {
     ok: true,
+    readAt,
     sources,
     issueRecords,
     rawIssue,

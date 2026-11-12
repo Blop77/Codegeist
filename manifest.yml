@@ -138,6 +138,17 @@ app:
             type: string
           confirmedIn:
             type: string
+      # One record per project: drift history and first-seen times, updated with a version check.
+      - name: radar-state
+        attributes:
+          projectKey:
+            type: string
+          version:
+            type: integer
+          radar:
+            type: any
+          updatedAt:
+            type: string
   compatibility:
     jira:
       required: true

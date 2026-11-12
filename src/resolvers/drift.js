@@ -12,27 +12,78 @@
  */
 import { createHash } from 'node:crypto';
 import api, { route } from '@forge/api';
-import { kvs } from '@forge/kvs';
+import { Filter, FilterConditions, kvs } from '@forge/kvs';
 import { issueStillMentions } from '../domain/matchIssues';
 import { adfToText } from './normalize';
 
 const MAX_FINDINGS = 300;
 const MAX_DRIFTS = 300;
 
-const radarKey = (projectKey) => `radar:${projectKey}`;
+/** The pre-entity record, read once to seed the versioned state. Never written any more. */
+const legacyRadarKey = (projectKey) => `radar:${projectKey}`;
 const visitKey = (accountId, projectKey) => `visit:${createHash('sha256').update(accountId).digest('hex')}:${projectKey}`;
 const driftId = (findingId, issueKey) => `${findingId}:${issueKey}`;
 const emptyRadar = () => ({ findings: {}, drifts: {} });
 
-export async function loadRadar(projectKey) {
-  const stored = await kvs.get(radarKey(projectKey));
-  return stored && typeof stored === 'object'
-    ? { findings: stored.findings ?? {}, drifts: stored.drifts ?? {} }
-    : emptyRadar();
+/**
+ * The radar lives in one custom-entity record per project with a version number. Every change is
+ * written with a conditional transaction that requires the version it read, so two invocations
+ * (a scan and the issue-update trigger, or two scans) cannot overwrite each other: the one that
+ * loses re-reads the latest record and applies its change again. `entity().get` is strongly
+ * consistent, so the re-read sees the winner's write.
+ */
+const STATE_ENTITY = 'radar-state';
+const stateKey = (projectKey) => `radar-state:${projectKey}`;
+const MAX_WRITE_ATTEMPTS = 6;
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const asRadar = (value) => ({ findings: value?.findings ?? {}, drifts: value?.drifts ?? {} });
+
+async function readState(projectKey) {
+  const stored = await kvs.entity(STATE_ENTITY).get(stateKey(projectKey));
+  if (stored) return { exists: true, version: Number(stored.version) || 0, radar: asRadar(stored.radar) };
+  const legacy = await kvs.get(legacyRadarKey(projectKey));
+  return { exists: false, version: 0, radar: legacy && typeof legacy === 'object' ? asRadar(legacy) : emptyRadar() };
 }
 
-async function saveRadar(projectKey, radar) {
-  await kvs.set(radarKey(projectKey), { ...radar, updatedAt: new Date().toISOString() });
+async function writeState(projectKey, state, radar) {
+  const value = { projectKey, version: state.version + 1, radar, updatedAt: new Date().toISOString() };
+  if (!state.exists) {
+    // First write for this project. Another invocation creating it first makes this fail, and the retry reads theirs.
+    await kvs.entity(STATE_ENTITY).set(stateKey(projectKey), value, { keyPolicy: 'FAIL_IF_EXISTS' });
+    return;
+  }
+  await kvs.transact()
+    .set(stateKey(projectKey), value, {
+      entityName: STATE_ENTITY,
+      conditions: new Filter().and('version', FilterConditions.equalTo(state.version))
+    })
+    .execute();
+}
+
+/** The project's radar as last stored (read-only). */
+export async function loadRadar(projectKey) {
+  return (await readState(projectKey)).radar;
+}
+
+/**
+ * Applies `change(radar) -> { radar, changed }` to the latest stored radar and saves it, retrying
+ * when another invocation saved in between. `change` must be a pure function of the radar it is
+ * given, because it may run more than once. Returns the radar the caller's change was applied to.
+ */
+export async function updateRadar(projectKey, change) {
+  for (let attempt = 1; ; attempt++) {
+    const state = await readState(projectKey);
+    const result = change(state.radar);
+    if (!result.changed) return result.radar;
+    try {
+      await writeState(projectKey, state, result.radar);
+      return result.radar;
+    } catch (error) {
+      if (attempt >= MAX_WRITE_ATTEMPTS) throw error;
+      await pause(25 * attempt + Math.floor(Math.random() * 25));
+    }
+  }
 }
 
 /** Keeps the record bounded: drops the oldest resolved drifts first, then the oldest entries. */
@@ -50,6 +101,9 @@ function prune(radar) {
   }
 }
 
+/** True when the drift's current state comes from an observation made after `observedAt`. */
+const newerThan = (drift, observedAt) => Boolean(drift.observedAt) && drift.observedAt > observedAt;
+
 /**
  * Pure: folds one scan into the radar. `candidates` are the findings the scan returned;
  * `issueRecords` contain the issue text read with the current user’s permissions.
@@ -59,8 +113,10 @@ function prune(radar) {
  * - An open drift is resolved only when its finding was found again AND its issue was read AND
  *   the issue no longer uses the outdated wording. A finding or issue missing from the scan
  *   (permissions, the 50-issue window, a truncated list) changes nothing.
+ * - `observedAt` is when the scan read the issues. A drift whose state was set by a later
+ *   observation (for example the issue-update trigger) is not changed by an older one.
  */
-export function applyScan(radar, { candidates, issueRecords, now = new Date().toISOString() }) {
+export function applyScan(radar, { candidates, issueRecords, now = new Date().toISOString(), observedAt = now }) {
   const next = structuredClone(radar);
   let changed = false;
   const present = new Set();
@@ -80,13 +136,13 @@ export function applyScan(radar, { candidates, issueRecords, now = new Date().to
       if (!drift) {
         next.drifts[id] = {
           findingId: candidate.id, issueKey: affected.issueKey, phrase: affected.outdatedWording,
-          status: 'open', firstSeenAt: now
+          status: 'open', firstSeenAt: now, observedAt
         };
         changed = true;
-      } else if (drift.status === 'resolved') {
+      } else if (drift.status === 'resolved' && !newerThan(drift, observedAt)) {
         next.drifts[id] = {
           findingId: candidate.id, issueKey: affected.issueKey, phrase: affected.outdatedWording,
-          status: 'open', firstSeenAt: drift.firstSeenAt, reopenedAt: now
+          status: 'open', firstSeenAt: drift.firstSeenAt, reopenedAt: now, observedAt
         };
         changed = true;
       }
@@ -98,8 +154,8 @@ export function applyScan(radar, { candidates, issueRecords, now = new Date().to
     if (drift.status !== 'open' || outdated.has(id)) continue;
     const issue = issues.get(drift.issueKey);
     if (!present.has(drift.findingId) || !issue?.title || issue.description === undefined) continue;
-    if (issueStillMentions(issue, drift.phrase)) continue;
-    next.drifts[id] = { ...drift, status: 'resolved', resolvedAt: now, resolvedBy: 'scan' };
+    if (newerThan(drift, observedAt) || issueStillMentions(issue, drift.phrase)) continue;
+    next.drifts[id] = { ...drift, status: 'resolved', resolvedAt: now, resolvedBy: 'scan', observedAt };
     changed = true;
   }
 
@@ -156,10 +212,10 @@ export function radarSummary(described) {
  * Records a scan and returns the findings with radar state. Never fails the scan: if the radar
  * cannot be read or saved, findings are returned without it and `radarWarning` says so.
  */
-export async function trackScan(projectKey, { candidates, issueRecords, previousVisitAt = null }) {
+export async function trackScan(projectKey, { candidates, issueRecords, previousVisitAt = null, observedAt }) {
   try {
-    const { radar, changed } = applyScan(await loadRadar(projectKey), { candidates, issueRecords });
-    if (changed) await saveRadar(projectKey, radar);
+    const now = new Date().toISOString();
+    const radar = await updateRadar(projectKey, (current) => applyScan(current, { candidates, issueRecords, now, observedAt: observedAt ?? now }));
     const described = describeFindings(radar, { candidates, issueRecords, previousVisitAt });
     return { candidates: described, summary: radarSummary(described), radarWarning: null };
   } catch (error) {
@@ -204,10 +260,12 @@ export async function onIssueUpdated(event) {
   if (!changedText) return { checked: 0, resolved: 0 };
 
   const projectKey = String(event?.issue?.fields?.project?.key ?? issueKey.split('-')[0]);
-  const radar = await loadRadar(projectKey);
-  const open = Object.entries(radar.drifts).filter(([, d]) => d.issueKey === issueKey && d.status === 'open');
+  const openFor = (radar) => Object.entries(radar.drifts).filter(([, d]) => d.issueKey === issueKey && d.status === 'open');
+  const open = openFor(await loadRadar(projectKey));
   if (open.length === 0) return { checked: 0, resolved: 0 };
 
+  // Taken before the read, so this observation is never treated as newer than what it saw.
+  const observedAt = new Date().toISOString();
   const response = await api.asApp().requestJira(route`/rest/api/3/issue/${issueKey}?fields=summary,description`);
   if (!response.ok) {
     console.warn(`Decision Drift Radar could not read ${issueKey} after an update (HTTP ${response.status})`);
@@ -219,14 +277,19 @@ export async function onIssueUpdated(event) {
   }
   const issue = { title: fields.summary, description: adfToText(fields.description) };
 
-  const now = new Date().toISOString();
+  // Re-applied to the latest stored radar if a scan saved in between; repeated events find nothing open.
   let resolved = 0;
-  for (const [id, drift] of open) {
-    if (issueStillMentions(issue, drift.phrase)) continue;
-    radar.drifts[id] = { ...drift, status: 'resolved', resolvedAt: now, resolvedBy: 'issue-update' };
-    resolved++;
-  }
-  if (resolved > 0) await saveRadar(projectKey, radar);
+  await updateRadar(projectKey, (current) => {
+    const next = structuredClone(current);
+    resolved = 0;
+    const now = new Date().toISOString();
+    for (const [id, drift] of openFor(next)) {
+      if (newerThan(drift, observedAt) || issueStillMentions(issue, drift.phrase)) continue;
+      next.drifts[id] = { ...drift, status: 'resolved', resolvedAt: now, resolvedBy: 'issue-update', observedAt };
+      resolved++;
+    }
+    return { radar: next, changed: resolved > 0 };
+  });
   // Issue key and counts only, so the trigger can be checked in `forge logs` without content.
   console.info(`Decision Drift Radar issue-update check: ${issueKey}, ${open.length} open, ${resolved} resolved`);
   return { checked: open.length, resolved };

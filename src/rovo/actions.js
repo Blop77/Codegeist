@@ -114,7 +114,7 @@ async function withReviews(projectKey, scanned) {
   if (!scanned.ok) return scanned;
   const all = [...scanned.candidates, ...(scanned.aiCandidates ?? [])];
   const { candidates: reviewed } = await attachReviewState(projectKey, all);
-  const { candidates } = await trackScan(projectKey, { candidates: reviewed, issueRecords: scanned.issueRecords });
+  const { candidates } = await trackScan(projectKey, { candidates: reviewed, issueRecords: scanned.issueRecords, observedAt: scanned.readAt });
   return { ...scanned, candidates: candidates.slice(0, scanned.candidates.length), aiCandidates: candidates.slice(scanned.candidates.length) };
 }
 
