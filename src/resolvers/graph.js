@@ -47,6 +47,31 @@ async function graph(query, variables) {
 
 const nodes = (connection) => (connection?.edges ?? []).map((edge) => edge?.node).filter(Boolean);
 
+const GRAPH_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 400;
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Runs a graph read and retries when it comes back empty or fails. The Teamwork Graph (Preview)
+ * sometimes answers with no edges for a link that exists; asking again usually returns it.
+ * After the last attempt an empty answer is accepted, and an error is thrown to the caller.
+ */
+async function graphNodes(query, variables, field) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= GRAPH_ATTEMPTS; attempt++) {
+    try {
+      const found = nodes((await graph(query, variables))[field]);
+      if (found.length > 0 || attempt === GRAPH_ATTEMPTS) return found;
+    } catch (error) {
+      lastError = error;
+      if (attempt === GRAPH_ATTEMPTS) throw error;
+    }
+    await pause(RETRY_DELAY_MS * attempt);
+  }
+  if (lastError) throw lastError;
+  return [];
+}
+
 /** Numeric page id from a ConfluencePage node (its `pageId`, or the tail of its ARI). */
 function pageIdOf(node) {
   const raw = String(node?.pageId ?? node?.id ?? '');
@@ -81,7 +106,7 @@ export async function discoverViaGraph({ projectKey, projectId, cloudId, knownPa
   try {
     // 1. Teams linked to the Jira project, and their Confluence spaces.
     const projectAri = `ari:cloud:jira:${cloudId}:project/${projectId}`;
-    const teams = nodes((await graph(TEAMS_BY_SPACE, { spaceAri: projectAri })).atlassianTeamsBySpace)
+    const teams = (await graphNodes(TEAMS_BY_SPACE, { spaceAri: projectAri }, 'atlassianTeamsBySpace'))
       .filter((n) => n.__typename === 'AtlassianTeam')
       .slice(0, MAX_TEAMS);
     summary.used = true;
@@ -89,7 +114,7 @@ export async function discoverViaGraph({ projectKey, projectId, cloudId, knownPa
 
     const spaceTeam = new Map();
     for (const team of teams) {
-      const spaces = nodes((await graph(SPACES_BY_TEAM, { teamAri: team.id })).spacesByAtlassianTeam)
+      const spaces = (await graphNodes(SPACES_BY_TEAM, { teamAri: team.id }, 'spacesByAtlassianTeam'))
         .filter((n) => n.__typename === 'ConfluenceSpace' && n.key);
       for (const space of spaces) {
         if (!spaceTeam.has(space.key) && spaceTeam.size < MAX_SPACES) spaceTeam.set(space.key, { space, team });
