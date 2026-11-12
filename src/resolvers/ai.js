@@ -24,6 +24,7 @@ You receive numbered sources. Return the decisions, open questions and proposals
 Rules:
 - "quote" must be one sentence copied exactly, character for character, from that source. Never paraphrase, shorten or fix it.
 - Only include text that states a decision, an unresolved question, or a suggestion. Skip status updates, plans of individual people, attendee lists, disclaimers, and anything negated ("not approved", "not a decision").
+- In Jira issue descriptions, skip sentences that only describe how the work is currently planned, scheduled or scoped ("the email campaign keeps separate channel plans"). That is the work item, not a decision about it. Report a sentence from a description only if it records that something was decided, agreed or approved.
 - "kind" is "decision", "open_question" or "proposal".
 - "reason" is at most 15 words on why it is a decision, question or proposal.
 - If there is nothing new, return an empty list.

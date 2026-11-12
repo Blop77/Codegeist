@@ -17,26 +17,28 @@ const MAX_SPACE_PAGES = 10;
 const MAX_LINK_ORIGINS = 5;
 const MAX_LINKED_PAGES = 10;
 
-const TEAMS_BY_SPACE = `query ddrTeamsBySpace($spaceAri: ID!) {
+const TEAMS_BY_SPACE = `query decisionradar_teamsBySpace($spaceAri: ID!) {
   atlassianTeamsBySpace(spaceAri: $spaceAri, first: ${MAX_TEAMS}) {
     edges { node { __typename ... on AtlassianTeam { id displayName } } }
   }
 }`;
 
-const SPACES_BY_TEAM = `query ddrSpacesByTeam($teamAri: ID!) {
+const SPACES_BY_TEAM = `query decisionradar_spacesByTeam($teamAri: ID!) {
   spacesByAtlassianTeam(teamAri: $teamAri, first: 25) {
     edges { node { __typename ... on ConfluenceSpace { id key name } } }
   }
 }`;
 
-const LINKED_PAGES = `query ddrLinkedPages($pageAri: ID!) {
+const LINKED_PAGES = `query decisionradar_linkedPages($pageAri: ID!) {
   confluencePageLinkedConfluencePages(id: $pageAri, first: ${MAX_LINKED_PAGES}) {
     edges { node { __typename ... on ConfluencePage { id pageId title } } }
   }
 }`;
 
+/** Teamwork Graph requires named operations shaped `company_operation`. */
 async function graph(query, variables) {
-  const response = await api.asUser().requestTeamworkGraph(query, variables);
+  const operationName = query.match(/query (\w+)/)?.[1];
+  const response = await api.asUser().requestTeamworkGraph(query, variables, operationName);
   if (!response.ok) throw new Error(`Teamwork Graph HTTP ${response.status}`);
   const body = await response.json();
   if (body?.errors?.length && !body?.data) throw new Error(body.errors.map((e) => e.message).join('; '));
