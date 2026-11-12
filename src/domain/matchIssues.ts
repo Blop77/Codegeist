@@ -264,13 +264,17 @@ export function matchIssues(subject: MatchSubject, index: IssueIndex): AffectedI
       }
     }
 
-    const stale = oldTerm !== undefined && containsPhrase(issueText(issue), oldTerm);
+    const text = issueText(issue);
+    const stale = oldTerm !== undefined && containsPhrase(text, oldTerm);
     const staleCounts = stale && (explicit || lexical || isDistinctive(oldTerm, p));
     if (staleCounts) {
       parts.push([0.2, `The issue still mentions “${oldTerm}”, which this decision ${change?.from ? 'replaces' : 'removes'}`]);
     }
 
     if (!explicit && !lexical && !staleCounts) continue;
+    if (explicit && !stale && change?.from && change.to && containsPhrase(text, change.to)) {
+      parts.push([0, `The issue mentions the replacement “${change.to}” and no longer mentions “${change.from}”`]);
+    }
     const relevance = round2(Math.min(0.99, parts.reduce((sum, [w]) => sum + w, 0)));
     out.push({ issueKey: issue.key, relevance, reasons: parts.map(([, r]) => r) });
   }

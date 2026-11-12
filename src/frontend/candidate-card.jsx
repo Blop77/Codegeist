@@ -41,16 +41,14 @@ function sourceVia(source) {
 
 export const MAX_NOTE_LENGTH = 2000;
 
-/** Payload for the `applyDecisionNote` resolver. The source link is made absolute for the comment. */
-export function notePayload(candidate, siteUrl, issueKey, note) {
+/** Payload for the note resolver. The quote identifies the evidence the reviewer saw. */
+export function notePayload(candidate, issueKey, note) {
   return {
     projectKey: candidate.source.projectKey,
     candidateId: candidate.id,
     issueKey,
     note,
-    quote: candidate.evidence.quote,
-    sourceTitle: candidate.source.title,
-    sourceUrl: siteLink(siteUrl, candidate.source.url)
+    quote: candidate.evidence.quote
   };
 }
 
@@ -146,7 +144,7 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onDraftNote }) 
     <Stack space="space.075">
       <Text>
         This posts one comment on {issueKey} in your name, with the note below, the quote and a link to the source.
-        Edit the note first if needed.
+        People who can see this Jira comment may have different access to the source. Check that the note and quote are safe to share.
       </Text>
       <TextArea
         name={`note-${candidate.id}-${issueKey}`}

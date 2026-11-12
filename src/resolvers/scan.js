@@ -103,3 +103,26 @@ export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
     notice
   };
 }
+
+/** Resolve a finding using the caller's current access and verify that it still matches this issue. */
+export async function resolveFindingForIssue({ projectKey, issueKey, candidateId, cloudId }) {
+  const issue = await scanIssue(issueKey, projectKey, { cloudId });
+  if (!issue.ok) return issue;
+  if (issue.rawIssue.key !== issueKey || (issue.rawIssue.fields?.project?.key ?? projectKey) !== projectKey) {
+    return { ok: false, error: 'This Jira issue has moved. Refresh the scan and try again.' };
+  }
+
+  const matches = (candidate) => candidate.id === candidateId
+    && candidate.affectedIssues.some((affected) => affected.issueKey === issueKey);
+  let candidate = [...issue.candidates, ...issue.aiCandidates].find(matches);
+  if (!candidate) {
+    // A project finding can originate from another issue in the same project.
+    const project = await scanProject(projectKey, { cloudId });
+    if (project.ok) candidate = [...project.candidates, ...project.aiCandidates].find(matches);
+  }
+  if (!candidate) {
+    return { ok: false, error: `This finding no longer points at ${issueKey}, or you can no longer see its source. Refresh the scan and try again.` };
+  }
+
+  return { ok: true, candidate, issue: issue.issueRecords[0] };
+}

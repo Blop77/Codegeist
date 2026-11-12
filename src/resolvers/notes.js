@@ -2,7 +2,9 @@
  * Review records and the app's one Jira write (a reviewed note posted as a comment), shared by
  * the app's resolvers and the Rovo agent's actions so both enforce the same rules.
  */
+import { randomUUID } from 'node:crypto';
 import api, { route, startsWith, storage } from '@forge/api';
+import { Filter, FilterConditions, kvs } from '@forge/kvs';
 import { noteCommentBody } from './normalize';
 
 export const MAX_NOTE_LENGTH = 2000;
@@ -52,6 +54,17 @@ export function trustedSourceUrl(value, siteUrl) {
   }
 }
 
+/** Source evidence resolved by the server, using the site URL from Forge context. */
+export function noteEvidence(candidate, siteUrl) {
+  const path = candidate.source.url;
+  const absolute = path?.startsWith('/') && siteUrl ? `${siteUrl.replace(/\/+$/, '')}${path}` : path;
+  return {
+    quote: candidate.evidence.quote,
+    sourceTitle: String(candidate.source.title ?? '').trim().slice(0, MAX_TITLE_LENGTH) || 'Source',
+    sourceUrl: trustedSourceUrl(absolute, siteUrl)
+  };
+}
+
 /** The suggested note, using only the finding's own words. The person edits it before posting. */
 export function defaultNoteText(candidate) {
   const where = { confluence_page: 'Confluence page', jira_issue: 'Jira issue', jira_comment: 'Jira comment' }[candidate.source.type]?.toLowerCase() ?? 'source';
@@ -72,15 +85,137 @@ export function noteProblem({ projectKey, candidateId, issueKey, note, quote }) 
   return null;
 }
 
-/**
- * Posts one note as a comment on `issueKey`, as the signed-in user, and records it. The caller
- * has already checked the review. Returns `{ ok, note, alreadyApplied?, warning? }` or `{ ok: false, error }`.
- * `confirmedIn` names where the person confirmed the note, for the comment's first line.
- */
+const NOTE_PROPERTY = 'decision-drift-radar-note';
+const REJECTED_BY_JIRA = new Set([400, 401, 403, 404, 413, 429]);
+const RECOVERY_GRACE_MS = 2 * 60_000;
+const RECOVERY_PAGE_SIZE = 25;
+const MAX_RECOVERY_PAGES = 4;
+const RESERVATION_ENTITY = 'note-reservation';
+const reservations = kvs.entity(RESERVATION_ENTITY);
+
+function releaseReservation(lockKey, attemptId) {
+  return kvs.transact().delete(lockKey, {
+    entityName: RESERVATION_ENTITY,
+    conditions: new Filter().and('attemptId', FilterConditions.equalTo(attemptId))
+  }).execute();
+}
+
+function uncertainNote(issueKey) {
+  return { ok: false, error: `The app could not confirm the note on ${issueKey} yet. Check the issue for the comment before trying again.` };
+}
+
+async function saveNoteReceipt(key, lockKey, attemptId, record) {
+  try {
+    await storage.set(key, record);
+  } catch {
+    // Keep the reservation. A retry can recover the comment using its Jira property.
+    return { ok: true, note: record, warning: `The comment was added to ${record.issueKey}, but the app could not record it yet.` };
+  }
+  try {
+    await releaseReservation(lockKey, attemptId);
+  } catch {
+    // The receipt is authoritative after it has been saved.
+  }
+  return { ok: true, note: record };
+}
+
+async function recoverNote(key, lockKey, issueKey, attempt) {
+  const startedAt = Date.parse(attempt.startedAt);
+  const earliest = startedAt - 60_000;
+  let allChecked = true;
+  let coversAttempt = false;
+  let observedTotal;
+  let newestFirst = true;
+  let previousTime = Infinity;
+  let sawRecentComment = false;
+  try {
+    for (let page = 0, startAt = 0; page < MAX_RECOVERY_PAGES; page++) {
+      const response = await api.asUser().requestJira(
+        route`/rest/api/3/issue/${issueKey}/comment?orderBy=-created&maxResults=${RECOVERY_PAGE_SIZE}&startAt=${startAt}`
+      );
+      if (!response.ok) return uncertainNote(issueKey);
+      const { comments, total } = await response.json();
+      if (!Array.isArray(comments)) return uncertainNote(issueKey);
+      if (page === 0) observedTotal = total;
+      else if (total !== observedTotal) allChecked = false;
+      const recent = comments.filter((comment) => {
+        const createdAt = Date.parse(comment.created);
+        if (!Number.isFinite(createdAt)) {
+          newestFirst = false;
+          return true;
+        }
+        if (createdAt > previousTime) newestFirst = false;
+        previousTime = createdAt;
+        if (createdAt < earliest) return false;
+        sawRecentComment = true;
+        return true;
+      });
+      const matches = await Promise.allSettled(recent.map(async (comment) => {
+        if (!comment.id) throw new Error('Jira did not identify the comment');
+        const property = await api.asUser().requestJira(route`/rest/api/3/comment/${comment.id}/properties/${NOTE_PROPERTY}`);
+        if (property.status === 404) return null;
+        if (!property.ok) throw new Error('Jira did not return the comment property');
+        return (await property.json()).value?.attemptId === attempt.attemptId ? comment : null;
+      }));
+      const match = matches.find((result) => result.status === 'fulfilled' && result.value)?.value;
+      if (match) {
+        const result = await saveNoteReceipt(key, lockKey, attempt.attemptId, {
+          issueKey, commentId: String(match.id), appliedAt: match.created || attempt.startedAt,
+          ...(attempt.confirmedIn ? { confirmedIn: attempt.confirmedIn } : {})
+        });
+        return { ...result, alreadyApplied: true };
+      }
+      startAt += comments.length;
+      allChecked &&= matches.every((result) => result.status === 'fulfilled');
+      coversAttempt = (typeof total === 'number' && total <= startAt)
+        || (newestFirst && sawRecentComment && previousTime < earliest);
+      if (coversAttempt || comments.length === 0) break;
+    }
+
+    if (Date.now() - startedAt >= RECOVERY_GRACE_MS && coversAttempt && allChecked) {
+      const receipt = await storage.get(key);
+      if (receipt) return { ok: true, note: receipt, alreadyApplied: true };
+      // A conditional delete cannot remove a newer reservation or leave a stale cleanup claim.
+      await releaseReservation(lockKey, attempt.attemptId);
+      return { ok: false, error: `No matching app comment was found on ${issueKey}. Check the issue before trying again.` };
+    }
+    return uncertainNote(issueKey);
+  } catch {
+    return uncertainNote(issueKey);
+  }
+}
+
+/** Shared Jira write. A reservation protects both posting paths until Jira's result is known. */
 export async function postNote({ projectKey, candidateId, issueKey, note, quote, sourceTitle, sourceUrl, siteUrl, confirmedIn }) {
   const key = noteKey(projectKey, candidateId, issueKey);
+  const lockKey = `posting:${key}`;
   const existing = await storage.get(key);
   if (existing) return { ok: true, note: existing, alreadyApplied: true };
+
+  const attempt = { attemptId: randomUUID(), startedAt: new Date().toISOString(), ...(confirmedIn ? { confirmedIn } : {}) };
+  try {
+    await reservations.set(lockKey, attempt, { keyPolicy: 'FAIL_IF_EXISTS' });
+  } catch {
+    const receipt = await storage.get(key);
+    if (receipt) return { ok: true, note: receipt, alreadyApplied: true };
+    const prior = await reservations.get(lockKey);
+    return prior
+      ? recoverNote(key, lockKey, issueKey, prior)
+      : { ok: false, error: 'Note posting is temporarily unavailable. Try again.' };
+  }
+
+  // Another request may have saved the receipt and released its reservation since our first read.
+  let receipt;
+  try {
+    receipt = await storage.get(key);
+  } catch {
+    await releaseReservation(lockKey, attempt.attemptId).catch(() => {});
+    return { ok: false, error: 'The app could not check earlier comments. Nothing was posted. Try again.' };
+  }
+  if (receipt) {
+    await releaseReservation(lockKey, attempt.attemptId).catch(() => {});
+    return { ok: true, note: receipt, alreadyApplied: true };
+  }
 
   const body = noteCommentBody({
     note,
@@ -89,27 +224,30 @@ export async function postNote({ projectKey, candidateId, issueKey, note, quote,
     sourceUrl: trustedSourceUrl(sourceUrl, siteUrl),
     confirmedIn
   });
-  const response = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}/comment`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ body })
-  });
-  if (!response.ok) {
-    if (response.status === 404) return { ok: false, error: `${issueKey} was not found, or you cannot see it. Nothing was posted.` };
-    if (response.status === 401 || response.status === 403) {
-      return { ok: false, error: `You do not have permission to comment on ${issueKey}, or the app is missing its Jira write permission. Nothing was posted.` };
-    }
-    return { ok: false, error: `Jira could not add the comment (HTTP ${response.status}). Nothing was posted.` };
-  }
-  const comment = await response.json();
-  const record = { issueKey, commentId: String(comment.id ?? ''), appliedAt: new Date().toISOString(), ...(confirmedIn ? { confirmedIn } : {}) };
   try {
-    await storage.set(key, record);
-  } catch (error) {
-    console.error('Decision Drift Radar note posted but its record was not saved', error);
-    return { ok: true, note: record, warning: `The comment was added to ${issueKey}, but the app could not record it. Do not add it again.` };
+    const response = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}/comment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ body, properties: [{ key: NOTE_PROPERTY, value: { attemptId: attempt.attemptId } }] })
+    });
+    if (!response.ok) {
+      if (!REJECTED_BY_JIRA.has(response.status)) return uncertainNote(issueKey);
+      await releaseReservation(lockKey, attempt.attemptId).catch(() => {});
+      if (response.status === 404) return { ok: false, error: `${issueKey} was not found, or you cannot see it. Nothing was posted.` };
+      if (response.status === 401 || response.status === 403) {
+        return { ok: false, error: `You do not have permission to comment on ${issueKey}. Nothing was posted.` };
+      }
+      return { ok: false, error: `Jira could not add the comment (HTTP ${response.status}). Nothing was posted.` };
+    }
+    const comment = await response.json();
+    if (!comment?.id) return uncertainNote(issueKey);
+    return saveNoteReceipt(key, lockKey, attempt.attemptId, {
+      issueKey, commentId: String(comment.id), appliedAt: comment.created || attempt.startedAt,
+      ...(confirmedIn ? { confirmedIn } : {})
+    });
+  } catch {
+    return uncertainNote(issueKey);
   }
-  return { ok: true, note: record };
 }
 
 /** Every stored value under a key prefix, read with one paginated query. */

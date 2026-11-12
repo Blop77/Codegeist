@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import ForgeReconciler, {
+  Button,
   Heading,
+  Inline,
+  Link,
   SectionMessage,
   Spinner,
   Stack,
@@ -8,7 +11,7 @@ import ForgeReconciler, {
   useProductContext
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
-import { CandidateCard, draftPayload, notePayload, withNote } from './candidate-card';
+import { CandidateCard, draftPayload, notePayload, siteLink, withNote } from './candidate-card';
 
 function IssuePanel() {
   const context = useProductContext();
@@ -16,10 +19,17 @@ function IssuePanel() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [reviewBusyId, setReviewBusyId] = useState(null);
+  const [draft, setDraft] = useState(null);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftMessage, setDraftMessage] = useState(null);
+  const [draftReceipt, setDraftReceipt] = useState(null);
 
   useEffect(() => {
     if (!issueKey) return;
 
+    setDraft(null);
+    setDraftMessage(null);
+    setDraftReceipt(null);
     let cancelled = false;
     const loadDecisionContext = async () => {
       try {
@@ -44,8 +54,8 @@ function IssuePanel() {
     setError(null);
     try {
       const response = choice === 'reset'
-        ? await invoke('clearDecisionReview', { projectKey: issueKey.split('-')[0], candidateId: candidate.id })
-        : await invoke('reviewDecision', { projectKey: issueKey.split('-')[0], candidateId: candidate.id, choice });
+        ? await invoke('clearDecisionReview', { projectKey: issueKey.split('-')[0], candidateId: candidate.id, issueKey })
+        : await invoke('reviewDecision', { projectKey: issueKey.split('-')[0], candidateId: candidate.id, choice, issueKey });
       if (!response?.ok) {
         setError(response?.error ?? 'Could not save this review. Try again.');
         return;
@@ -65,13 +75,51 @@ function IssuePanel() {
 
   const applyNote = async (candidate, noteIssueKey, note) => {
     try {
-      const response = await invoke('applyDecisionNote', notePayload(candidate, context?.siteUrl, noteIssueKey, note));
+      const response = await invoke('applyDecisionNote', notePayload(candidate, noteIssueKey, note));
       if (response?.ok) setResult((current) => withNote(current, candidate.id, noteIssueKey, response.note));
       return response;
     } catch {
       return { ok: false, error: 'Could not add the note. Check the comments on this issue before trying again.' };
     }
   };
+
+  const loadDraft = async () => {
+    setDraftBusy(true);
+    setDraft(null);
+    setDraftMessage(null);
+    setDraftReceipt(null);
+    try {
+      const response = await invoke('getRovoDraft', { issueKey });
+      if (response?.ok && response.draft) setDraft(response.draft);
+      else setDraftMessage(response?.error ?? 'No draft for this issue. Ask Decision Drift Radar in Rovo to prepare a note.');
+    } catch {
+      setDraftMessage('Could not load your draft. Try again.');
+    } finally {
+      setDraftBusy(false);
+    }
+  };
+
+  const postDraft = async () => {
+    setDraftBusy(true);
+    setDraftMessage(null);
+    try {
+      const response = await invoke('postRovoDraft', { issueKey, draftId: draft.id });
+      if (response?.ok) {
+        setDraft(null);
+        setDraftReceipt(response.note);
+        setDraftMessage(response.warning ?? null);
+        setResult((current) => withNote(current, response.candidateId, issueKey, response.note));
+      } else {
+        setDraftMessage(response?.error ?? 'The note could not be posted.');
+      }
+    } catch {
+      setDraftMessage('Could not verify that the note posted. Check the issue before trying again.');
+    } finally {
+      setDraftBusy(false);
+    }
+  };
+
+  const draftComment = draftReceipt?.commentId ? siteLink(context?.siteUrl, `/browse/${issueKey}?focusedCommentId=${draftReceipt.commentId}`) : null;
 
   return (
     <Stack space="space.200">
@@ -80,9 +128,32 @@ function IssuePanel() {
       {issueKey && !result && !error && <Spinner />}
       {error && <SectionMessage appearance="error">{error}</SectionMessage>}
       {result?.warnings?.length > 0 && (
-        <SectionMessage appearance="warning" title="Confluence is unavailable">
-          Only this issue's description and comments were scanned. Enable Confluence on this site to include decision pages.
+        <SectionMessage appearance="warning" title="Confluence project-key search unavailable">
+          {result.warnings.join(' ')}
         </SectionMessage>
+      )}
+      {result?.graph?.note && <SectionMessage appearance="information">{result.graph.note}</SectionMessage>}
+      {result && (
+        <Stack space="space.100">
+          <Inline>
+            <Button onClick={loadDraft} isDisabled={draftBusy}>Load Rovo draft</Button>
+          </Inline>
+          {draftMessage && <SectionMessage appearance="information">{draftMessage}</SectionMessage>}
+          {draftReceipt && <Text>Note added to {issueKey}.{draftComment && <> <Link href={draftComment}>View comment</Link></>}</Text>}
+          {draft && (
+            <Stack space="space.075">
+              <Heading size="small">Comment preview</Heading>
+              <Text>Decision Drift Radar note · drafted with the Rovo agent and approved in the Jira issue panel</Text>
+              {draft.note.split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line, index) => <Text key={index}>{line}</Text>)}
+              <Text>“{draft.quote}”</Text>
+              <Text>Source: {draft.sourceUrl ? <Link href={draft.sourceUrl}>{draft.sourceTitle}</Link> : draft.sourceTitle}</Text>
+              <Text>Jira viewers may have different access to the source. Check that the note and quote are safe to share.</Text>
+              <Inline>
+                <Button appearance="primary" onClick={postDraft} isDisabled={draftBusy}>{`Post Rovo draft to ${issueKey}`}</Button>
+              </Inline>
+            </Stack>
+          )}
+        </Stack>
       )}
       {result?.notice && <SectionMessage appearance="information">{result.notice}</SectionMessage>}
       {result?.reviewWarning && <SectionMessage appearance="warning" title="Review history unavailable">{result.reviewWarning}</SectionMessage>}
@@ -106,7 +177,7 @@ function IssuePanel() {
       )) : result ? (
         <SectionMessage appearance="information" title="No linked decisions found">
           Nothing in this issue's comments or the project's Confluence pages clearly points at this issue. Check the project
-          radar for decisions that matched no issue.
+          radar for decisions from other issues in the project.
         </SectionMessage>
       ) : null}
     </Stack>

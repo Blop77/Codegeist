@@ -263,6 +263,24 @@ check('MC demo: one decision, no disclaimer, MC-9 flagged as drift, listed issue
   assert.ok(c.affectedIssues[0].reasons.includes('The issue still mentions “separate channel plans”, which this decision replaces'));
 });
 
+check('a rescan reports the replacement only when the linked issue text mentions it', () => {
+  const scan = (description: string) => extractDecisions({
+    sources: [mcDemoInput.sources[0]],
+    issues: mcDemoInput.issues.map((issue) => issue.key === 'MC-9' ? { ...issue, description } : issue)
+  }).candidates[0].affectedIssues.find((issue) => issue.issueKey === 'MC-9')!.reasons;
+
+  const updated = scan('Scheduling: email, website and social follow one shared launch plan.');
+  assert.ok(updated.includes('The issue mentions the replacement “one shared launch plan” and no longer mentions “separate channel plans”'));
+  assert.ok(!updated.some((reason) => reason.includes('still mentions')));
+
+  const deleted = scan('Scheduling: pending.');
+  assert.ok(!deleted.some((reason) => reason.includes('mentions the replacement')));
+
+  const conflicting = scan('We discussed one shared launch plan. Scheduling still uses separate channel plans.');
+  assert.ok(conflicting.some((reason) => reason.includes('still mentions')));
+  assert.ok(!conflicting.some((reason) => reason.includes('mentions the replacement')));
+});
+
 check('reference lines under a decisions heading are not decisions', () => {
   const heading = { sourceType: 'confluence_page' as const, sourceTitle: 'Launch sync', underDecisionHeading: true, decisionListItem: true };
   for (const sentence of ['Related Jira issues: MC-1, MC-5, MC-9, MC-10.', 'See also: PAY-101 and PAY-104.', 'Owners: Priya and Marcus.', 'MC-1, MC-5, MC-9 and MC-10.']) {
@@ -272,26 +290,29 @@ check('reference lines under a decisions heading are not decisions', () => {
 });
 
 check('AI proposals are kept only when the quote is verbatim, new and well formed', () => {
-  const page = mcDemoInput.sources[0];
-  const known = extractDecisions(mcDemoInput).candidates;
-  const indirect = 'Status: Demo example only.';
-  const r = verifyProposedFindings(mcDemoInput, [
-    { sourceId: page.id, quote: indirect, kind: 'decision', reason: 'states the page status' },
+  const indirect = 'After the review, the team is going ahead with Tuesday-only sends for the email campaign.';
+  const page = { ...mcDemoInput.sources[0], text: `${mcDemoInput.sources[0].text}\n${indirect}\nThis was not approved.` };
+  const input = { ...mcDemoInput, sources: [page] };
+  const known = extractDecisions(input).candidates;
+  const r = verifyProposedFindings(input, [
+    { sourceId: page.id, quote: indirect, kind: 'decision', reason: 'states the new send schedule' },
     { sourceId: page.id, quote: 'We agreed to use one shared launch plan for every channel.', kind: 'decision' },
     { sourceId: page.id, quote: known[0].evidence.quote, kind: 'decision' },
     { sourceId: 'no-such-source', quote: indirect, kind: 'decision' },
     { sourceId: page.id, quote: indirect, kind: 'verdict' as never },
-    { sourceId: page.id, quote: 'Status:', kind: 'decision' },
+    { sourceId: page.id, quote: 'Status: Demo example only.', kind: 'decision' },
+    { sourceId: page.id, quote: 'the team is going ahead with Tuesday-only sends for the email campaign.', kind: 'decision' },
+    { sourceId: page.id, quote: 'This was not approved.', kind: 'decision' },
   ], known);
   assert.equal(r.candidates.length, 1);
-  assert.equal(r.rejected, 5);
+  assert.equal(r.rejected, 7);
   const [c] = r.candidates;
   assert.equal(page.text.slice(c.evidence.start, c.evidence.end), indirect);
   assert.match(c.id, /^dc_[a-f0-9]{16}$/);
   assert.ok(c.confidenceReasons[0].startsWith('Found by the AI pass'));
-  assert.ok(c.confidenceReasons.includes('AI note: states the page status'));
-  assert.deepEqual(verifyProposedFindings(mcDemoInput, r.candidates.map((x) => ({ sourceId: x.source.id, quote: x.evidence.quote, kind: x.kind })), [...known, ...r.candidates]).candidates, []);
-  assert.deepEqual(verifyProposedFindings(mcDemoInput, 'nonsense' as never).candidates, []);
+  assert.ok(c.confidenceReasons.includes('AI note: states the new send schedule'));
+  assert.deepEqual(verifyProposedFindings(input, r.candidates.map((x) => ({ sourceId: x.source.id, quote: x.evidence.quote, kind: x.kind })), [...known, ...r.candidates]).candidates, []);
+  assert.deepEqual(verifyProposedFindings(input, 'nonsense' as never).candidates, []);
 });
 
 check('only list items under a Decisions heading fall back to decisions', () => {

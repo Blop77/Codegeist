@@ -21,7 +21,7 @@ How to install Decision Drift Radar on your own Atlassian site and see it workin
 | `storage:app` | Save each finding's review status, and record notes already posted. |
 | Forge LLMs (AI feature, shown on the install screen) | The optional **Find more with AI** pass. Runs only on request. |
 | `read:graph:project:jira`, `read:graph:team:atlassian`, `read:graph:space:confluence`, `read:graph:page:confluence` | Teamwork Graph: find the teams linked to the project you scan, their Confluence spaces, and pages linked from decision pages. |
-| `write:jira-work` | Post one comment on an issue, only when you review a note and select **Post comment**, or confirm a note the Rovo agent prepared. |
+| `write:jira-work` | Post one comment on an issue, only when you review a note and select **Post comment**, or post a Rovo draft from the Jira issue panel. |
 
 The app calls no external services, and all data stays in Atlassian. The optional AI pass uses a model hosted by Atlassian (Forge LLMs), and runs only when you select **Find more with AI**. Because it is an AI feature, Atlassian shows it on the install screen and asks site admins to approve it.
 
@@ -114,7 +114,15 @@ Status updates go out on Mondays.
 - A new decision, "Status updates go out on Fridays instead of on Mondays.", with **Found through Teamwork Graph: a Confluence space of team Launch team, linked to KEY**.
 - Under **May affect**, `KEY-1`, with "The issue still mentions "on Mondays", which this decision replaces".
 
-Teamwork Graph can take a few minutes to index new team links. If the box says no team is linked yet, wait a few minutes and scan again. Without Part 3, the scan works as in Part 2 and notes that no linked team was found.
+Teamwork Graph can take a few minutes to index new team links. Until then there is no **Context from Teamwork Graph** box, and a line under the scan summary says "Teamwork Graph shows no Atlassian team linked to KEY…". Wait a few minutes and scan again. Without Part 3, the scan works as in Part 2 and shows that same line.
+
+If something in the Teamwork Graph path fails, the scan still completes and that line says which step failed, keeping what was found before it:
+
+- "Teamwork Graph gave no usable answer about teams linked to KEY…": the Graph answered without a usable result. Scan again in a minute.
+- "Teamwork Graph could not be reached (HTTP …)…": the Graph request itself failed.
+- "Launch team has no Confluence space linked in Teamwork Graph…": the team is linked to the project but not to a space. Repeat step 2 for the space.
+- "Teamwork Graph found Launch, but Confluence could not search it (HTTP 403)…": the team and space were found, but your account cannot search that space, or the app is not installed in Confluence.
+- "Could not read Teamwork Graph links from 1 of 3 decision pages…": links from the other pages were still read.
 
 ## Part 4: ask the Rovo agent (optional)
 
@@ -127,6 +135,8 @@ If Rovo is available on your site, the app adds an agent named **Decision Drift 
 The agent runs the same scan and answers with the decision, its exact quote, a link to your page, the reasons (starting with "The issue still mentions "separate channel plans", which this decision replaces"), and whether a teammate has reviewed it. You can also ask it to scan the project, or to **find more with AI**, which runs the AI pass.
 
 To close the gap from the chat, ask **"Draft a note for KEY-1 about this decision"**. The agent writes a short note and calls its prepare action, which changes nothing and returns the exact comment. It shows you the comment and asks whether to post it. Only after you say yes does it call the post action. The app then checks that the comment is exactly the one you were shown, that you are the person who prepared it, that this was within ten minutes, and that no teammate has dismissed the finding. The comment is posted in your name, the finding is marked relevant, and a second note for the same finding and issue is refused. If you start from an issue that already has a note from Part 2, use another affected issue or another finding.
+
+To try a Rovo draft, choose an affected issue without a posted note and ask the agent to draft a note for that finding. Open the issue's **Decision Drift Radar** panel and select **Load Rovo draft**. Check the exact note, quote, source and audience. Select **Post Rovo draft to KEY-1** if you want the comment posted. The draft expires after ten minutes. If the issue or source changes after preparation, make a new draft. Opening or loading the draft leaves Jira unchanged.
 
 ## If something looks wrong
 

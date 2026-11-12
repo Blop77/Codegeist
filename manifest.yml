@@ -36,7 +36,6 @@ modules:
         - find-issue-decisions
         - find-more-decisions-with-ai
         - prepare-decision-note
-        - post-decision-note
   action:
     - key: find-project-decisions
       name: Find decisions for a project
@@ -63,7 +62,7 @@ modules:
     - key: find-more-decisions-with-ai
       name: Find more decisions with AI
       function: findMoreDecisionsWithAi
-      actionVerb: GET
+      actionVerb: CREATE
       description: Runs the app's AI pass on a Jira project to find indirectly phrased decisions the wording rules missed. Returns only findings whose quote matches a source word for word. Use only when the user asks for more findings. Limited per site per day.
       inputs:
         projectKey:
@@ -74,8 +73,8 @@ modules:
     - key: prepare-decision-note
       name: Prepare a decision note
       function: prepareDecisionNote
-      actionVerb: GET
-      description: Prepares a comment for a Jira issue about a decision that may not have reached it, and returns the exact comment with a confirmation code. Changes nothing. Show the comment to the user and ask before posting it.
+      actionVerb: CREATE
+      description: Saves a private draft for an affected Jira issue. Send the user to its Decision Drift Radar panel to review and post the exact comment.
       inputs:
         issueKey:
           title: Issue key
@@ -92,17 +91,6 @@ modules:
           type: string
           required: false
           description: Two or three plain sentences based only on the finding - what was decided, what in the issue looks out of date, what to update. The app adds the quote and source link below it. Leave empty for the app's standard note.
-    - key: post-decision-note
-      name: Post a confirmed decision note
-      function: postDecisionNote
-      actionVerb: CREATE
-      description: Posts the comment returned by prepare-decision-note, exactly as shown, in the user's name. Call only after the user has seen the comment and clearly said yes. Marks the finding relevant for the project.
-      inputs:
-        confirmationCode:
-          title: Confirmation code
-          type: string
-          required: true
-          description: The confirmationCode returned by prepare-decision-note.
   llm:
     - key: decision-drift-radar-llm
       model:
@@ -118,8 +106,6 @@ modules:
       handler: index.findMoreDecisionsWithAi
     - key: prepareDecisionNote
       handler: index.prepareDecisionNote
-    - key: postDecisionNote
-      handler: index.postDecisionNote
 resources:
   - key: main
     path: src/frontend/index.jsx
@@ -133,6 +119,16 @@ app:
     memoryMB: 256
     architecture: arm64
   id: ari:cloud:ecosystem::app/68a157f1-8d36-4681-ad80-656a45181b6a
+  storage:
+    entities:
+      - name: note-reservation
+        attributes:
+          attemptId:
+            type: string
+          startedAt:
+            type: string
+          confirmedIn:
+            type: string
   compatibility:
     jira:
       required: true

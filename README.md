@@ -23,14 +23,14 @@ The link installs the production build. The app sends no data outside Atlassian;
 - Jira issue and project lookups using the signed-in user's access.
 - **Teamwork Graph context**: besides pages that mention the project key, the scan follows Atlassian's Teamwork Graph from the Jira project to its linked teams, their Confluence spaces, and pages linked from decision pages, so decisions recorded in a team's own space are found too. Each such finding says how it was found.
 - **AI pass, on request**: **Find more with AI** asks an Atlassian-hosted model (Forge LLMs) for decisions phrased indirectly that the wording rules miss. A finding is kept only if its quote is found word for word in the source, and it is labelled **Found by AI**. Verified AI findings are saved for the project and re-checked against the current sources on every scan, so the issue panel and the Rovo agent show them too. **Draft with AI** writes the note for an affected issue and, when a phrase in the issue's description conflicts with the decision, suggests the change, quoting that phrase word for word. A usage counter targets 40 AI runs per site per day; this is not a strict concurrent-request cap.
-- **Rovo agent** "Decision Drift Radar": ask in Rovo Chat which decisions may affect an issue or a project, ask it to find more with AI, or ask it to draft a note. It answers with the quote, the source link, the reasons and the team's review. To post, it prepares the exact comment (which changes nothing), shows it, and posts only after you confirm; the app checks that the comment is the one you were shown, prepared by you within ten minutes, and that the finding was not dismissed.
+- **Rovo agent** "Decision Drift Radar": ask in Rovo Chat which decisions may affect an issue or a project, ask it to find more with AI, or ask it to draft a note. It answers with the quote, the source link, the reasons and the team's review. Rovo prepares a private draft. You load the exact comment in the Jira issue panel and choose whether to post it. Drafts expire after ten minutes, and the app rechecks the finding before posting.
 - **Try with sample data**: the same analysis on a small bundled project, for sites that have no decision pages yet, including a sample Teamwork Graph discovery. The baseline sample does not read or change Jira or Confluence data.
 - Scoped Confluence page search for pages mentioning the project key.
 - Decision extraction (`src/domain/`) over issue descriptions, issue comments and those Confluence pages: decisions, open questions and proposals, each with a quote, source link, wording signals, and the reasons it may affect a Jira issue.
 - Jira issue panel showing the decisions that point at the open issue.
 - Shared per-project review state: teammates can mark a finding relevant or dismiss it, with the review date retained in Forge storage.
 - Source links, permission-aware errors, and warnings when Confluence cannot be reached.
-- One Jira write, always confirmed by a person: once a finding is marked relevant, a teammate can edit a note and post it as a comment on an affected issue, with the quote and source link (or confirm a note the Rovo agent prepared). Successful notes are recorded to suppress repeat posting in the normal workflow; simultaneous requests or a failed receipt write are not covered by an atomic exactly-once guarantee. Reviews alone never change Jira.
+- One Jira write, always confirmed by a person: once a finding is marked relevant, a teammate can edit a note and post it as a comment on an affected issue, with the quote and source link (or post a Rovo draft from the issue panel). The app reserves each finding and issue before posting and can recover a missing receipt from the Jira comment. Reviews alone never change Jira.
 
 ## Local setup
 
@@ -42,7 +42,7 @@ The link installs the production build. The app sends no data outside Atlassian;
 6. If the app was already installed, upgrade the installation after deploying a scope change so Jira can grant it: `forge install --upgrade --site <site>.atlassian.net --product Jira --environment development`.
 7. To enable Confluence page discovery, install the optional Confluence app on the same demo site: run `forge install --demo-site --environment development` again and select Confluence.
 
-Run the tests with `npm test` (Node 22.18 or later; no install needed). It runs the domain fixture checks and the resolver and Rovo action tests, which replace Jira, Confluence, Teamwork Graph, Forge storage and Forge LLMs with in-memory mocks (`test/mocks`). GitHub Actions runs the same on every push and pull request.
+Run the tests with `npm test` (Node 22.18 or later; no install needed). It runs the domain, resolver, Rovo and Teamwork Graph tests, which replace Jira, Confluence, Teamwork Graph, Forge storage and Forge LLMs with in-memory mocks (`test/mocks`). GitHub Actions runs the same on every push and pull request.
 
 See [Atlassian's Jira Forge tutorial](https://developer.atlassian.com/platform/forge/build-a-hello-world-app-in-jira/) for the current CLI and install flow.
 

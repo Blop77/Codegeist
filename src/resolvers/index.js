@@ -1,11 +1,12 @@
 import Resolver from '@forge/resolver';
 import api, { route, storage } from '@forge/api';
 import { toIssueSummary } from './normalize';
-import { analyze, safeError, scanIssue, scanProject, validProjectKey } from './scan';
+import { analyze, resolveFindingForIssue, safeError, scanIssue, scanProject, validProjectKey } from './scan';
 import { SAMPLE_GRAPH, SAMPLE_PROJECT_KEY, sampleIssues, sampleSources } from './sample-data';
 import { draftNoteWithAi, findWithAi } from './ai';
+import { confirmRovoDraft, loadRovoDraft } from './rovo-drafts';
 import {
-  attachReviewState, canAccessProject, MAX_NOTE_LENGTH, noteProblem, postNote, reviewKey, validReviewTarget
+  attachReviewState, canAccessProject, MAX_NOTE_LENGTH, noteEvidence, noteProblem, postNote, reviewKey, validReviewTarget
 } from './notes';
 
 const resolver = new Resolver();
@@ -58,15 +59,27 @@ resolver.define('getIssueDecisionContext', async ({ payload, context }) => {
   try {
     const scanned = await scanIssue(issueKey, projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
-    const { warnings, candidates: forIssue, notice } = scanned;
+    const { warnings, candidates: forIssue, notice, graph } = scanned;
     const { candidates, reviewWarning } = await attachReviewState(projectKey, [...forIssue, ...scanned.aiCandidates]);
 
-    return { ok: true, issueKey, candidates, notice, reviewWarning, warnings };
+    return { ok: true, issueKey, candidates, notice, reviewWarning, warnings, graph };
   } catch (error) {
     console.error('Decision Drift Radar issue context failed', error);
     return { ok: false, error: 'Could not load decision context for this issue.' };
   }
 });
+
+async function canReviewFinding({ projectKey, candidateId, issueKey, cloudId }) {
+  if (!(await canAccessProject(projectKey))) return { ok: false, error: NO_PROJECT_ACCESS };
+  if (issueKey && new RegExp(`^${projectKey}-\\d+$`).test(issueKey)) {
+    return resolveFindingForIssue({ projectKey, candidateId, issueKey, cloudId });
+  }
+  const project = await scanProject(projectKey, { cloudId });
+  if (!project.ok) return project;
+  return [...project.candidates, ...project.aiCandidates].some((candidate) => candidate.id === candidateId)
+    ? { ok: true }
+    : { ok: false, error: 'This finding is no longer visible to you. Refresh the scan and try again.' };
+}
 
 resolver.define('reviewDecision', async ({ payload, context }) => {
   const projectKey = String(payload?.projectKey ?? '').trim().toUpperCase();
@@ -80,7 +93,8 @@ resolver.define('reviewDecision', async ({ payload, context }) => {
   }
 
   try {
-    if (!(await canAccessProject(projectKey))) return { ok: false, error: NO_PROJECT_ACCESS };
+    const finding = await canReviewFinding({ projectKey, candidateId, issueKey: payload?.issueKey, cloudId: context.cloudId });
+    if (!finding.ok) return finding;
     const review = {
       status: choice,
       reviewedAt: new Date().toISOString()
@@ -103,7 +117,8 @@ resolver.define('clearDecisionReview', async ({ payload, context }) => {
     return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
   }
   try {
-    if (!(await canAccessProject(projectKey))) return { ok: false, error: NO_PROJECT_ACCESS };
+    const finding = await canReviewFinding({ projectKey, candidateId, issueKey: payload?.issueKey, cloudId: context.cloudId });
+    if (!finding.ok) return finding;
     await storage.delete(reviewKey(projectKey, candidateId));
     return { ok: true };
   } catch (error) {
@@ -135,10 +150,43 @@ resolver.define('applyDecisionNote', async ({ payload, context }) => {
     if (review?.status !== 'relevant') {
       return { ok: false, error: 'Mark this finding relevant before adding a note to Jira.' };
     }
-    return await postNote({ ...request, sourceTitle: payload?.sourceTitle, sourceUrl: payload?.sourceUrl, siteUrl: context?.siteUrl });
+    const finding = await resolveFindingForIssue({ ...request, cloudId: context.cloudId });
+    if (!finding.ok) return finding;
+    const evidence = noteEvidence(finding.candidate, context.siteUrl);
+    if (evidence.quote !== request.quote) {
+      return { ok: false, error: 'The decision evidence changed. Refresh the scan and review the new evidence before posting.' };
+    }
+    return await postNote({ ...request, ...evidence, siteUrl: context.siteUrl });
   } catch (error) {
     console.error('Decision Drift Radar note failed', error);
     return { ok: false, error: 'Could not add the note. Check the issue before trying again, in case the comment was posted.' };
+  }
+});
+
+function panelDraftContext(payload, context) {
+  const issueKey = String(payload?.issueKey ?? '').trim().toUpperCase();
+  if (!context?.accountId || !/^[A-Z][A-Z0-9_]{1,9}-\d+$/.test(issueKey)) return null;
+  return { accountId: context.accountId, issueKey, siteUrl: context.siteUrl, cloudId: context.cloudId };
+}
+
+resolver.define('getRovoDraft', async ({ payload, context }) => {
+  const input = panelDraftContext(payload, context);
+  if (!input) return { ok: false, error: 'Could not identify the user or Jira issue.' };
+  try {
+    return await loadRovoDraft(input);
+  } catch {
+    return { ok: false, error: 'Could not load the draft. Refresh the issue panel and try again.' };
+  }
+});
+
+resolver.define('postRovoDraft', async ({ payload, context }) => {
+  const input = panelDraftContext(payload, context);
+  const id = String(payload?.draftId ?? '');
+  if (!input || !/^[a-f0-9-]{36}$/.test(id)) return { ok: false, error: 'Could not identify this draft. Reload the panel and try again.' };
+  try {
+    return await confirmRovoDraft(input, id);
+  } catch {
+    return { ok: false, error: 'Could not verify that the note posted. Check the issue before trying again.' };
   }
 });
 
@@ -155,11 +203,9 @@ resolver.define('draftDecisionNote', async ({ payload, context }) => {
   }
   if (!context?.accountId) return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
   try {
-    const scanned = await scanIssue(issueKey, projectKey, { cloudId: context?.cloudId });
-    if (!scanned.ok) return { ok: false, error: scanned.error };
-    const candidate = [...scanned.candidates, ...scanned.aiCandidates].find((c) => c.id === candidateId);
-    if (!candidate) return { ok: false, error: `This finding no longer points at ${issueKey}. Scan again.` };
-    const drafted = await draftNoteWithAi({ candidate, issue: scanned.issueRecords[0] });
+    const finding = await resolveFindingForIssue({ projectKey, issueKey, candidateId, cloudId: context.cloudId });
+    if (!finding.ok) return finding;
+    const drafted = await draftNoteWithAi(finding);
     if (!drafted.ok) return drafted;
     const suggestion = drafted.suggestion
       ? `\nSuggested change to the description: replace "${drafted.suggestion.outdated}" with "${drafted.suggestion.replacement}".`

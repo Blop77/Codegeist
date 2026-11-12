@@ -161,7 +161,7 @@ export const NOTE_MARKER = 'Decision Drift Radar note';
 export function noteCommentBody({ note, quote, sourceTitle, sourceUrl, confirmedIn }) {
   const text = (value, marks) => ({ type: 'text', text: value, ...(marks ? { marks } : {}) });
   const title = sourceTitle || 'Source';
-  const byline = confirmedIn === 'rovo' ? ' · drafted with the Rovo agent and confirmed by a teammate before posting' : ' · reviewed by a teammate before posting';
+  const byline = confirmedIn === 'rovo' ? ' · drafted with the Rovo agent and approved in the Jira issue panel' : ' · reviewed by a teammate before posting';
   return {
     type: 'doc',
     version: 1,

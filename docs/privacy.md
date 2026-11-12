@@ -31,16 +31,17 @@ The app stores a small amount of data in Forge storage for your site:
 - For each finding a teammate reviews: the review status ("relevant" or "dismissed") and the time of the review.
 - For each note posted to Jira: the issue key, the comment's id and the time it was posted.
 - For the AI pass: a count of runs per day and the time of the last run per project, used to limit usage.
-- For AI-pass findings that passed the word-for-word check: per project, up to 30 entries, each with the source's id, the quoted sentence (one sentence copied from the page, description or comment), its kind and the model's short reason. They are kept so teammates see the same findings later, and are checked again against the current source on every scan. Running the AI pass again replaces older entries beyond the 30 newest.
-- When the Rovo agent prepares a note: the issue key, the note text, the quote, the source title and link, and an expiry time ten minutes ahead, under a key that contains the account id of the person in the chat, so only that person can confirm it. The record is deleted when the note is posted, and expired records are deleted the next time that person prepares a note.
+- For AI-pass findings that passed the word-for-word check: per project, up to 30 entries, each with the source's id, the quoted sentence (one sentence copied from the page, description or comment), and its kind. They are kept so teammates see the same findings later, and are checked again against the current source on every scan. Running the AI pass again replaces older entries beyond the 30 newest.
+- When the Rovo agent prepares a note: its text, issue key, source evidence and expiry, stored under a key derived from the requesting account and issue. The draft is available to that teammate for ten minutes. The app checks source access again before showing or posting it. Forge expires the draft record.
+- While posting a Jira note: a random attempt ID and timestamp. The app adds the ID as a Jira comment property so it can recover a missing receipt without writing a second comment.
 
-Review, note and AI-usage records are keyed by project key and a generated id for the finding, and contain no account ids, names, email addresses or source text. The saved AI findings contain short quotes from your content, and pending agent notes contain an account id and the note text, as described above.
+Review, note and AI-usage records are keyed by project key and a generated id for the finding, and contain no account ids, names, email addresses or source text. The saved AI findings contain short quotes from your content, and pending agent notes contain the note text and are keyed by a hash of the account ID, as described above.
 
-Atlassian may keep operational logs for Forge apps. Some error handlers log raw errors or model-response details. Those diagnostics may include source or generated content; do not treat operational logs as guaranteed content-free.
+Atlassian may keep operational logs for Forge apps. The AI error handlers record a failure without including the model response. Other operational errors may still include request details.
 
 ## What the app changes
 
-The app posts a comment on a Jira issue only when a person marks a finding relevant, reviews the note and chooses to post it, or when a person confirms, in Rovo Chat, a note the agent prepared and showed them. The comment is posted in that person's name, and a note confirmed in Rovo Chat also marks the finding relevant. The app makes no other changes to Jira or Confluence.
+The app posts a comment on a Jira issue only when a person marks a finding relevant, reviews the note and chooses to post it, or when a person reviews and posts a Rovo draft from the Jira issue panel. The comment is posted in that person's name. Posting a Rovo draft also records a relevant review if the finding was unreviewed. A Jira comment can be visible to people who do not have access to its source, so check that the note and quote are safe to share before posting. The app makes no other changes to Jira or Confluence.
 
 The "Try with sample data" scan uses fictional data bundled with the app. The baseline sample scan does not read or change Jira or Confluence data. Selecting its optional AI pass processes bundled fictional text and stores AI usage/cooldown records in Forge storage.
 

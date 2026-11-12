@@ -527,7 +527,7 @@ const MAX_REASON_LENGTH = 160;
 
 /**
  * Turns proposals from a model into candidates, keeping only those whose quote appears verbatim
- * in the named source. Spans, ids and issue matching use the same rules as `extractDecisions`,
+ * as a complete sentence in the named source. Spans, ids and issue matching use the same rules as `extractDecisions`,
  * so a verified finding is indistinguishable in shape from a rule-based one. `known` holds the
  * candidates already found; proposals overlapping one of them are dropped. Pure and deterministic.
  */
@@ -545,6 +545,7 @@ export function verifyProposedFindings(
     taken.get(c.source.id)!.push([c.evidence.start, c.evidence.end]);
   }
 
+  const sentencesBySource = new Map<string, Map<string, Sentence>>();
   const candidates: DecisionCandidate[] = [];
   let rejected = 0;
   for (const p of Array.isArray(proposals) ? proposals : []) {
@@ -554,12 +555,22 @@ export function verifyProposedFindings(
       rejected++;
       continue;
     }
-    const start = source.text.indexOf(quote);
-    if (start === -1) {
+    let sentences = sentencesBySource.get(source.id);
+    if (!sentences) {
+      sentences = new Map();
+      for (const sentence of walkSentences(source.text)) {
+        if (!sentences.has(sentence.text)) sentences.set(sentence.text, sentence);
+      }
+      sentencesBySource.set(source.id, sentences);
+    }
+    const evidence = sentences.get(quote);
+    if (!evidence || REFERENCE_LINE.test(quote) || DISCLAIMER.some((rule) => rule.test(quote))
+      || SELF_REFERENCE.some((rule) => rule.test(quote))
+      || (p.kind === 'decision' && (quote.endsWith('?') || NEGATED_APPROVAL.test(quote) || UNRESOLVED.some((rule) => rule.test(quote))))) {
       rejected++;
       continue;
     }
-    const end = start + quote.length;
+    const { start, end } = evidence;
     const spans = taken.get(source.id) ?? [];
     if (spans.some(([a, b]) => start < b && end > a)) {
       rejected++;
