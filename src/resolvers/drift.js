@@ -52,7 +52,7 @@ function prune(radar) {
 
 /**
  * Pure: folds one scan into the radar. `candidates` are the findings the scan returned;
- * `scannedIssueKeys` are the issues whose current text the scan read.
+ * `issueRecords` contain the issue text read with the current user’s permissions.
  *
  * - A finding seen for the first time gets `firstSeenAt`.
  * - An affected issue with outdated wording opens a drift (or reopens a resolved one).
@@ -60,7 +60,7 @@ function prune(radar) {
  *   the issue no longer uses the outdated wording. A finding or issue missing from the scan
  *   (permissions, the 50-issue window, a truncated list) changes nothing.
  */
-export function applyScan(radar, { candidates, scannedIssueKeys, now = new Date().toISOString() }) {
+export function applyScan(radar, { candidates, issueRecords, now = new Date().toISOString() }) {
   const next = structuredClone(radar);
   let changed = false;
   const present = new Set();
@@ -93,10 +93,12 @@ export function applyScan(radar, { candidates, scannedIssueKeys, now = new Date(
     }
   }
 
-  const issues = new Set(scannedIssueKeys);
+  const issues = new Map(issueRecords.map((issue) => [issue.key, issue]));
   for (const [id, drift] of Object.entries(next.drifts)) {
     if (drift.status !== 'open' || outdated.has(id)) continue;
-    if (!present.has(drift.findingId) || !issues.has(drift.issueKey)) continue;
+    const issue = issues.get(drift.issueKey);
+    if (!present.has(drift.findingId) || !issue?.title || issue.description === undefined) continue;
+    if (issueStillMentions(issue, drift.phrase)) continue;
     next.drifts[id] = { ...drift, status: 'resolved', resolvedAt: now, resolvedBy: 'scan' };
     changed = true;
   }
@@ -110,8 +112,9 @@ export function applyScan(radar, { candidates, scannedIssueKeys, now = new Date(
  * `drift` on each affected issue, and `resolvedIssues` for issues that no longer match at all.
  * Only findings already in `candidates` (what this user's scan returned) are described.
  */
-export function describeFindings(radar, candidates, previousVisitAt = null) {
-  const drifts = Object.values(radar.drifts);
+export function describeFindings(radar, { candidates, issueRecords, previousVisitAt = null }) {
+  const readable = new Set(issueRecords.map((issue) => issue.key));
+  const drifts = Object.values(radar.drifts).filter((drift) => readable.has(drift.issueKey));
   return candidates.map((candidate) => {
     const firstSeenAt = radar.findings[candidate.id]?.firstSeenAt ?? null;
     const mine = drifts.filter((d) => d.findingId === candidate.id);
@@ -153,11 +156,11 @@ export function radarSummary(described) {
  * Records a scan and returns the findings with radar state. Never fails the scan: if the radar
  * cannot be read or saved, findings are returned without it and `radarWarning` says so.
  */
-export async function trackScan(projectKey, { candidates, scannedIssueKeys, previousVisitAt = null }) {
+export async function trackScan(projectKey, { candidates, issueRecords, previousVisitAt = null }) {
   try {
-    const { radar, changed } = applyScan(await loadRadar(projectKey), { candidates, scannedIssueKeys });
+    const { radar, changed } = applyScan(await loadRadar(projectKey), { candidates, issueRecords });
     if (changed) await saveRadar(projectKey, radar);
-    const described = describeFindings(radar, candidates, previousVisitAt);
+    const described = describeFindings(radar, { candidates, issueRecords, previousVisitAt });
     return { candidates: described, summary: radarSummary(described), radarWarning: null };
   } catch (error) {
     console.warn('Decision Drift Radar could not update its drift record', error);
@@ -210,8 +213,11 @@ export async function onIssueUpdated(event) {
     console.warn(`Decision Drift Radar could not read ${issueKey} after an update (HTTP ${response.status})`);
     return { checked: open.length, resolved: 0 };
   }
-  const fields = (await response.json())?.fields ?? {};
-  const issue = { title: fields.summary ?? '', description: adfToText(fields.description) };
+  const fields = (await response.json())?.fields;
+  if (!fields?.summary || !Object.hasOwn(fields, 'description')) {
+    return { checked: open.length, resolved: 0 };
+  }
+  const issue = { title: fields.summary, description: adfToText(fields.description) };
 
   const now = new Date().toISOString();
   let resolved = 0;

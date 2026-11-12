@@ -87,7 +87,7 @@ You should see:
 
 **8. Verify the correction.** In Jira, replace the scheduling line you added to the issue with `Scheduling: this work follows one shared launch plan.` Save and scan again. `KEY-1` now shows **Replacement wording found**. Its reason says that the issue mentions “one shared launch plan” and no longer mentions “separate channel plans”. The existing comment remains available. Radar checks the wording on each scan. Deleting the old wording alone does not produce this status.
 
-The radar also remembers the drift. Before the edit, the **Radar** summary under the scan line counted `KEY-1` as still drifting, with "Drifting since …" under it. After the edit, `KEY-1` shows **Resolved** · "No longer mentions “separate channel plans”", and the summary counts it as resolved. You don't need to scan: a few minutes after you save the issue, Jira notifies the app, and the issue panel and the next scan show "noticed when the issue was edited". If you scan straight away, it shows "found by a later scan" instead.
+The radar also remembers the drift. Before the edit, the **Radar** summary under the scan line counted `KEY-1` as still drifting, with "Drifting since …" under it. After the edit, `KEY-1` shows **Resolved** · "No longer mentions “separate channel plans”", and the summary counts it as resolved. You don't need to scan: a few minutes after you save the issue, Jira notifies the app, and the issue panel and the next scan show "noticed when the issue was edited". If a scan resolves the drift before Jira delivers the update, it shows "found by a later scan".
 
 **9. See what's new.** Add another decision paragraph to your Confluence page, for example `Decision: We agreed to publish release notes on Fridays instead of Mondays. Related Jira issues: KEY-1.` Wait a minute for search indexing, and scan again. The new decision has a **New since your last visit** label, and the summary counts it. On your first visit nothing is labelled new, because there is no earlier visit to compare with.
 
@@ -122,6 +122,8 @@ Status updates go out on Mondays.
 - Under **May affect**, `KEY-1`, with "The issue still mentions "on Mondays", which this decision replaces".
 
 Teamwork Graph can take a few minutes to index new team links. Until then there is no **Context from Teamwork Graph** box, and a line under the scan summary says "Teamwork Graph shows no Atlassian team linked to KEY…". Wait a few minutes and scan again. Without Part 3, the scan works as in Part 2 and shows that same line.
+
+**6. Follow the same finding through to resolution.** On a build that includes the Jira issue-update trigger, replace only the line from step 4 with `Status updates go out on Fridays.` Save and leave the Radar project page and issue panel closed for about four minutes. Then open the issue panel. If the finding is still shown there, look for **Resolved** and **No longer mentions “on Mondays”**, followed by **noticed when the issue was edited**. The project page also shows the resolution, including under **Resolved since it was found** if the updated issue no longer matches the decision. If a scan recorded it first, the reason reads **found by a later scan**. This verifies the issue wording. The underlying work may still need to be carried out.
 
 If something in the Teamwork Graph path fails, the scan still completes and that line says which step failed, keeping what was found before it:
 

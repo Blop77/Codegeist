@@ -9,7 +9,7 @@ How the hackathon demo is set up, how to run it, and what it does and does not s
 | Demo site | `one-atlas-pxox.atlassian.net`, a Forge demo site active until 2027-02-09 |
 | Installation | One development installation covering **Jira (required)** and **Confluence**, major version 6, up to date (`forge install list`) |
 | Other site | `decitrace.atlassian.net` is still on major version 2. Forge classifies it as a production site, so it is deliberately not upgraded with development builds. |
-| Development | Version **6.7.0**, checked on the demo site. Rovo prepared a draft, and a teammate previewed and posted the exact comment from the Jira issue panel. |
+| Development | Version **6.8.0**, verified on MC-10 for resolution on edit and reopening after restoration. The prior **6.7.0** test verified Rovo draft preparation and posting from the Jira issue panel. |
 | Production | Version **3.3.0**, checked on `jiggzer.atlassian.net` with the existing installation link. The live scan found a decision page through Teamwork Graph without a project key in the page, and a reviewed note posted once to the affected issue. |
 
 Version 4 added the `write:jira-work` scope for the note action, so the installation was upgraded to grant it.
@@ -46,6 +46,14 @@ After later changes, deploy to production again. Reviewers who already installed
 6. Select **Mark relevant** on a finding, then **Add note to …**, edit the note and **Post comment**. MC-9 already has a note from testing, so post to MC-10 or MC-8 in a demo.
 7. Open the issue: its **Decision Drift Radar** panel shows the baseline decision, the review and the note. Verified AI-pass findings are saved for the project, so the panel (and the Rovo agent) show them too, re-checked against the current source text without a model call.
 8. On MC-9, open **Rovo Chat**, choose the **Decision Drift Radar** agent, and select **Which decisions may affect this issue?** Ask it to draft a note for an affected issue without a posted note. Open that issue’s **Decision Drift Radar** panel, select **Load Rovo draft**, review the exact comment, then choose **Post Rovo draft** in Jira.
+
+## Demo the Graph-to-resolution workflow
+
+Use MC-10 as the main story. Show **Social calendar: decisions** and its **Found through Teamwork Graph** label, then show Jira's original scheduling line. It tells the team to publish on the same day as the website update, while the Confluence decision says to publish the day after.
+
+On the demo issue, replace the scheduling line with `Scheduling: social posts go live the day after the website update.` Save and leave the Radar project page and issue panel closed for at least four minutes. Cut over the wait in the video. Return to the issue panel and show **Resolved**, **No longer mentions “on the same day”**, and **noticed when the issue was edited**. The project summary moved from **3 issues still drifting** to **2 issues still drifting · 1 resolved** in the development test. The edit was made by a person. Radar detected the change.
+
+After capturing the result, restore `Scheduling: social posts go live on the same day as the website update.` and rescan. The development test confirmed **3 issues still drifting · 0 resolved** after restoration.
 
 ## Sample data and its limits
 

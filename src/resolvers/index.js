@@ -32,7 +32,7 @@ resolver.define('getProjectRadar', async ({ payload, context }) => {
     const previousVisitAt = await lastVisit(context?.accountId, projectKey);
     const tracked = await trackScan(projectKey, {
       candidates: reviewed,
-      scannedIssueKeys: rawIssues.map((issue) => issue.key),
+      issueRecords: scanned.issueRecords,
       previousVisitAt
     });
     await saveVisit(context?.accountId, projectKey);
@@ -72,7 +72,7 @@ resolver.define('getIssueDecisionContext', async ({ payload, context }) => {
     if (!scanned.ok) return { ok: false, error: scanned.error };
     const { warnings, candidates: forIssue, notice, graph } = scanned;
     const { candidates: reviewed, reviewWarning } = await attachReviewState(projectKey, [...forIssue, ...scanned.aiCandidates]);
-    const tracked = await trackScan(projectKey, { candidates: reviewed, scannedIssueKeys: [scanned.rawIssue.key] });
+    const tracked = await trackScan(projectKey, { candidates: reviewed, issueRecords: scanned.issueRecords });
 
     return {
       ok: true, issueKey, candidates: tracked.candidates, notice, reviewWarning, warnings, graph,
