@@ -1,6 +1,6 @@
 # Testing instructions
 
-How to install Decision Drift Radar on your own Atlassian site and see it working. Part 1 needs no setup. Part 2 uses your own Jira and Confluence data and takes about five minutes.
+How to install Decision Drift Radar on your own Atlassian site and see it working. Part 1 needs no setup. Part 2 uses your own Jira and Confluence data and takes about five minutes. Part 3 shows the Teamwork Graph integration with your own team (about five more minutes), and Part 4 the Rovo agent.
 
 ## What you need
 
@@ -21,7 +21,7 @@ How to install Decision Drift Radar on your own Atlassian site and see it workin
 | `storage:app` | Save each finding's review status, and record notes already posted. |
 | Forge LLMs (AI feature, shown on the install screen) | The optional **Find more with AI** pass. Runs only on request. |
 | `read:graph:project:jira`, `read:graph:team:atlassian`, `read:graph:space:confluence`, `read:graph:page:confluence` | Teamwork Graph: find the teams linked to the project you scan, their Confluence spaces, and pages linked from decision pages. |
-| `write:jira-work` | Post one comment on an issue, only when you review a note and select **Post comment**. |
+| `write:jira-work` | Post one comment on an issue, only when you review a note and select **Post comment**, or confirm a note the Rovo agent prepared. |
 
 The app calls no external services, and all data stays in Atlassian. The optional AI pass uses a model hosted by Atlassian (Forge LLMs), and runs only when you select **Find more with AI**. Because it is an AI feature, Atlassian shows it on the install screen and asks site admins to approve it.
 
@@ -30,7 +30,7 @@ The app calls no external services, and all data stays in Atlassian. The optiona
 1. In Jira, open **Apps → Decision Drift Radar**.
 2. Select **Try with sample data**.
 
-This runs the real analysis on a small fictional project bundled with the app. The baseline sample does not read or change Jira or Confluence data. Its optional AI pass stores usage/cooldown records in Forge storage. You should see four decisions, two open questions and one proposal. Each finding shows the quoted evidence, the wording signals, and the issues it may affect with the reasons, for example:
+This runs the real analysis on a small fictional project bundled with the app. The baseline sample does not read or change Jira or Confluence data. Its optional AI pass stores usage/cooldown records in Forge storage. You should see five decisions, two open questions and one proposal, and a **Context from Teamwork Graph (sample)** box. One decision, "Manual fraud review covers high-risk orders only…", comes from a page in the Payments team's own space that never mentions PAY; it shows how a Teamwork Graph discovery looks ("Found through Teamwork Graph…", affecting PAY-108). Part 3 shows the same thing with your own team. Each finding shows the quoted evidence, the wording signals, and the issues it may affect with the reasons, for example:
 
 > **PAY-103 · relevance 0.85**
 > • Shares terms with the issue: "confirmation", "mail", "old", "relay"
@@ -74,11 +74,9 @@ You should see:
 
 **4. Review it.** Select **Mark relevant**. The review is saved for the project; **Undo review** clears it. Nothing in Jira changes yet.
 
-**5. Post a note.** Under `KEY-1`, select **Add note to KEY-1**. Edit the suggested note if you like, then select **Post comment to KEY-1**. The card shows "Note added to KEY-1" with a **View comment** link. The comment on the issue is in your name and contains the note, the quoted decision and a link to the page.
+**5. Post a note.** Under `KEY-1`, select **Add note to KEY-1**. Edit the suggested note if you like, or select **Draft with AI** to have the AI write it from the decision and the issue (when a phrase in the description conflicts with the decision, the draft suggests the change, quoting that phrase word for word). Then select **Post comment to KEY-1**. The card shows "Note added to KEY-1" with a **View comment** link. The comment on the issue is in your name and contains the note, the quoted decision and a link to the page.
 
-**Teamwork Graph (optional).** If an Atlassian team is linked to your project (in the project's settings, or on the team's page), the scan also reads decision pages in that team's Confluence spaces, even pages that never mention `KEY`, and pages linked from decision pages. The result shows a "Context from Teamwork Graph" box, and those findings say "Found through Teamwork Graph". With no linked team, the scan notes that and works as above.
-
-**6. Try the AI pass (optional).** Below the findings, select **Find more with AI**. It looks for decisions the wording rules missed and shows each with a **Found by AI** label and a quote checked against its source. On your test page it may find nothing more, which is expected. **Try with sample data** includes one indirectly worded decision ("Marcus confirmed the team is locking in weekly payouts to merchants starting in January"), so running the AI pass there shows a result.
+**6. Try the AI pass (optional).** Below the findings, select **Find more with AI**. It looks for decisions the wording rules missed and shows each with a **Found by AI** label and a quote checked against its source. On your test page it may find nothing more, which is expected. **Try with sample data** includes one indirectly worded decision ("Marcus confirmed the team is locking in weekly payouts to merchants starting in January"), so running the AI pass there shows a result. On a real project, verified AI findings are saved: the next scan, the issue panel and the Rovo agent show them too, after checking each quote again against the current source text, without calling the model.
 
 **7. Check the safeguards.**
 
@@ -86,7 +84,39 @@ You should see:
 - Open `KEY-1`: the **Decision Drift Radar** panel on the issue shows the same decision, its review and the posted note.
 - Open the project and choose **Decision Drift Radar** in its sidebar (Jira labels it "Space navigation"): the app scans that project without asking for a key. On a new site the app may not be in the sidebar yet: use **Add to navigation**, then find it under **More**.
 
-## Part 3: ask the Rovo agent (optional)
+## Part 3: Teamwork Graph with your own team (about five minutes)
+
+This part shows decisions that live in a team's own Confluence space and never mention the project key. Only the Teamwork Graph connects them to the project.
+
+**1. Create a team.** Open `https://YOUR-SITE.atlassian.net/people`, select **Create team**, name it (for example `Launch team`) and add yourself. You can use an existing team instead.
+
+**2. Link the team to your project and a space.** On the team's profile, find **Team links** and select **+**. Choose your Jira project (`KEY`). Select **+** again and choose a Confluence space, for example the one you used in Part 2.
+
+**3. Create a page in that space** titled `Team decisions`, with these two paragraphs, and publish. Do not mention `KEY` on this page:
+
+```text
+Weekly sync with the launch team.
+
+Decision: Status updates go out on Fridays instead of on Mondays.
+```
+
+The title matters: in team spaces the app reads pages whose title says they hold decisions ("decision", "decisions", "decided", "agreed" or "ADR").
+
+**4. Add one more line to `KEY-1`'s description** and save:
+
+```text
+Status updates go out on Mondays.
+```
+
+**5. Scan again.** You should see:
+
+- A **Context from Teamwork Graph** box naming your team and its Confluence space, and saying it added one decision page that does not mention `KEY`.
+- A new decision, "Status updates go out on Fridays instead of on Mondays.", with **Found through Teamwork Graph: a Confluence space of team Launch team, linked to KEY**.
+- Under **May affect**, `KEY-1`, with "The issue still mentions "on Mondays", which this decision replaces".
+
+Teamwork Graph can take a few minutes to index new team links. If the box says no team is linked yet, wait a few minutes and scan again. Without Part 3, the scan works as in Part 2 and notes that no linked team was found.
+
+## Part 4: ask the Rovo agent (optional)
 
 If Rovo is available on your site, the app adds an agent named **Decision Drift Radar**. Rovo is not enabled on every site; a new free developer site may not have it. Atlassian's Codegeist demo sites (`forge site provision`) include it.
 
@@ -94,7 +124,9 @@ If Rovo is available on your site, the app adds an agent named **Decision Drift 
 2. In the agent menu at the top of the chat, search for **Decision Drift Radar** and select it.
 3. Choose the starter **Which decisions may affect this issue?**
 
-The agent runs the same scan and answers with the decision, its exact quote, a link to your page, and the reasons, starting with "The issue still mentions "separate channel plans", which this decision replaces". You can also ask it to scan the project. The agent only reads; to review a finding or post a note it sends you back to the app.
+The agent runs the same scan and answers with the decision, its exact quote, a link to your page, the reasons (starting with "The issue still mentions "separate channel plans", which this decision replaces"), and whether a teammate has reviewed it. You can also ask it to scan the project, or to **find more with AI**, which runs the AI pass.
+
+To close the gap from the chat, ask **"Draft a note for KEY-1 about this decision"**. The agent writes a short note and calls its prepare action, which changes nothing and returns the exact comment. It shows you the comment and asks whether to post it. Only after you say yes does it call the post action. The app then checks that the comment is exactly the one you were shown, that you are the person who prepared it, that this was within ten minutes, and that no teammate has dismissed the finding. The comment is posted in your name, the finding is marked relevant, and a second note for the same finding and issue is refused. If you start from an issue that already has a note from Part 2, use another affected issue or another finding.
 
 ## If something looks wrong
 
@@ -108,9 +140,9 @@ The agent runs the same scan and answers with the decision, its exact quote, a l
 
 ## What the app does not do
 
-- It never edits issue fields, statuses or assignees. Its only change to Jira is the comment you confirm.
+- It never edits issue fields, statuses or assignees. Its only change to Jira is the comment you confirm, in the app or in Rovo Chat.
 - It reads the 50 most recently updated issues, up to 20 project-key search pages, up to 10 additional team-space pages and up to 10 linked pages. Results depend on permissions and search/Graph indexing.
-- The main scan works on English text with explicit decision wording and uses no AI model, so the same input always gives the same findings. The optional AI pass finds indirectly worded decisions; it keeps a finding only if its quote is found word for word in the source, and a usage counter targets 40 runs per site per day, without an atomic concurrent-request guarantee. AI-pass findings are transient; issue panels and Rovo run the baseline scan.
+- The main scan works on English text with explicit decision wording and uses no AI model, so the same input always gives the same findings. The optional AI pass finds indirectly worded decisions; it keeps a finding only if its quote is found word for word in the source, and a usage counter targets 40 runs per site per day, without an atomic concurrent-request guarantee. Verified AI-pass findings are saved per project, checked again against the current sources on every scan, and shown on the project page, the issue panel and in Rovo; they disappear if their quote is no longer in the source. **Draft with AI** counts towards the same daily limit.
 
 ## Verification notes (12 November 2026)
 

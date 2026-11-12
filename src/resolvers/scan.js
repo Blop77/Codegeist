@@ -6,6 +6,7 @@ import api, { route } from '@forge/api';
 import { extractDecisions } from '../domain/extractDecisions';
 import { issueSources, pageSource, toIssueRecord } from './normalize';
 import { discoverViaGraph } from './graph';
+import { savedAiCandidates } from './ai';
 
 const ISSUE_FIELDS = 'summary,status,labels,updated,description,comment,reporter,project';
 const MAX_CANDIDATES = 50;
@@ -54,7 +55,8 @@ async function projectPages(projectKey, projectId, cloudId) {
 
 /**
  * Scans the 50 most recently updated issues of a project, the pages that mention its key, and
- * pages the Teamwork Graph connects to it. `cloudId` comes from the Forge context.
+ * pages the Teamwork Graph connects to it. `cloudId` comes from the Forge context. Findings from
+ * earlier AI passes are re-checked against these sources and returned as `aiCandidates`.
  */
 export async function scanProject(projectKey, { cloudId } = {}) {
   const jql = `project = "${projectKey}" ORDER BY updated DESC`;
@@ -69,7 +71,11 @@ export async function scanProject(projectKey, { cloudId } = {}) {
   const sources = [...pages, ...rawIssues.flatMap((issue) => issueSources(issue, projectKey))];
   const issueRecords = rawIssues.map((issue) => toIssueRecord(issue, projectKey));
   const { candidates, notice } = analyze(sources, issueRecords);
-  return { ok: true, rawIssues, pages, warnings, candidates, notice, sources, issueRecords, graph };
+  const ai = await savedAiCandidates({ projectKey, sources, issues: issueRecords, known: candidates });
+  return {
+    ok: true, rawIssues, pages, warnings, candidates, notice, sources, issueRecords, graph,
+    aiCandidates: ai.candidates, aiSavedAt: ai.savedAt
+  };
 }
 
 /** Scans one issue and its project's pages, keeping only findings that point at that issue. */
@@ -82,6 +88,8 @@ export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
   const sources = [...pages, ...issueSources(rawIssue, projectKey)];
   const issueRecords = [toIssueRecord(rawIssue, projectKey)];
   const { candidates, notice } = analyze(sources, issueRecords);
+  const ai = await savedAiCandidates({ projectKey, sources, issues: issueRecords, known: candidates });
+  const pointsHere = (c) => c.affectedIssues.some((a) => a.issueKey === rawIssue.key);
   return {
     ok: true,
     sources,
@@ -90,7 +98,8 @@ export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
     pages,
     warnings,
     graph,
-    candidates: candidates.filter((c) => c.affectedIssues.some((a) => a.issueKey === rawIssue.key)),
+    candidates: candidates.filter(pointsHere),
+    aiCandidates: ai.candidates.filter(pointsHere),
     notice
   };
 }

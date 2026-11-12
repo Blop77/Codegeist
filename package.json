@@ -5,7 +5,10 @@
   "description": "A Forge app that connects decisions to Jira work with reviewable evidence.",
   "main": "src/index.js",
   "scripts": {
-    "start": "forge tunnel"
+    "start": "forge tunnel",
+    "test": "npm run test:domain && npm run test:resolvers",
+    "test:domain": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/register.mjs src/domain/fixtures/checkFixtures.ts",
+    "test:resolvers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/register.mjs --test test/resolvers.test.ts"
   },
   "dependencies": {
     "@forge/api": "^6.0.0",
@@ -13,5 +16,8 @@
     "@forge/llm": "^1.0.10",
     "@forge/react": "^11.0.0",
     "@forge/resolver": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=22.18"
   }
 }
