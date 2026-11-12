@@ -43,7 +43,8 @@ async function readState(projectKey) {
   const stored = await kvs.entity(STATE_ENTITY).get(stateKey(projectKey));
   if (stored) return { exists: true, version: Number(stored.version) || 0, radar: asRadar(stored.radar) };
   const legacy = await kvs.get(legacyRadarKey(projectKey));
-  return { exists: false, version: 0, radar: legacy && typeof legacy === 'object' ? asRadar(legacy) : emptyRadar() };
+  const hasLegacy = Boolean(legacy && typeof legacy === 'object');
+  return { exists: false, migrating: hasLegacy, version: 0, radar: hasLegacy ? asRadar(legacy) : emptyRadar() };
 }
 
 async function writeState(projectKey, state, radar) {
@@ -75,12 +76,15 @@ export async function updateRadar(projectKey, change) {
   for (let attempt = 1; ; attempt++) {
     const state = await readState(projectKey);
     const result = change(state.radar);
-    if (!result.changed) return result.radar;
+    // Save on the first read of an old single-key record even without a change, so it is read only once.
+    if (!result.changed && !state.migrating) return result.radar;
     try {
       await writeState(projectKey, state, result.radar);
       return result.radar;
     } catch (error) {
       if (attempt >= MAX_WRITE_ATTEMPTS) throw error;
+      // Project key and attempt only: lets a real write conflict be seen in `forge logs`.
+      console.info(`Decision Drift Radar radar write retry: ${projectKey}, attempt ${attempt} of ${MAX_WRITE_ATTEMPTS}`);
       await pause(25 * attempt + Math.floor(Math.random() * 25));
     }
   }

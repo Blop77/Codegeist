@@ -178,6 +178,20 @@ test('history in the old single-key record is carried over, and can still reopen
   assert.equal(tracked.summary.drifting, 1);
 });
 
+test('an old single-key record is copied across on first read even when nothing changed', async () => {
+  kvsMemory.clear();
+  kvsMemory.set('radar:DD', { findings: { dc_a: { firstSeenAt: t(0) } }, drifts: { 'dc_a:DD-1': open('dc_a', 'DD-1', 'on Mondays') } });
+  const issue = { key: 'DD-1', title: 'Status updates', description: 'Status updates go out on Mondays.' };
+  await trackScan('DD', { candidates: [finding('dc_a', [outdated('DD-1', 'on Mondays')])], issueRecords: [issue] });
+  assert.equal(kvsMemory.get(STATE('DD'))?.version, 1, 'the new record exists after one read');
+  assert.equal(stored().drifts['dc_a:DD-1'].status, 'open');
+  const writes: string[] = [];
+  g.__kvsHook = async (op: string, key: string) => { if (op !== 'get') writes.push(key); };
+  await trackScan('DD', { candidates: [finding('dc_a', [outdated('DD-1', 'on Mondays')])], issueRecords: [issue] });
+  g.__kvsHook = undefined;
+  assert.deepEqual(writes, [], 'later scans with nothing new write nothing');
+});
+
 test('a viewer sees drift history only for findings and issues their own scan read', () => {
   const radar = {
     findings: { dc_a: { firstSeenAt: t(0) }, dc_hidden: { firstSeenAt: t(0) } },
