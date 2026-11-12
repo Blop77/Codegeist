@@ -10,7 +10,7 @@ Decision Drift Radar helps teams catch decisions recorded in Confluence or Jira 
 
 You need to be an admin of a site with Jira and Confluence. Install into Jira, then open the link again to connect Confluence on the same site.
 
-- **No setup:** in Jira, open **Apps → Decision Drift Radar** and select **Try with sample data** to see a full scan of a small bundled project. Nothing is read from or written to your site.
+- **No setup:** in Jira, open **Apps → Decision Drift Radar** and select **Try with sample data** to see a full scan of a small bundled project. The baseline sample does not read or change Jira or Confluence data. Its optional AI pass stores usage counters in Forge storage.
 - **With your own data:** follow the [testing instructions](docs/testing-instructions.md). It takes about five minutes and includes copy-paste text.
 
 The link installs the production build. The app sends no data outside Atlassian; see the [privacy policy](docs/privacy.md).
@@ -20,15 +20,15 @@ The link installs the production build. The app sends no data outside Atlassian;
 - Jira global page with a project picker, and a Jira project page that scans the open project.
 - Jira issue and project lookups using the signed-in user's access.
 - **Teamwork Graph context**: besides pages that mention the project key, the scan follows Atlassian's Teamwork Graph from the Jira project to its linked teams, their Confluence spaces, and pages linked from decision pages, so decisions recorded in a team's own space are found too. Each such finding says how it was found.
-- **AI pass, on request**: **Find more with AI** asks an Atlassian-hosted model (Forge LLMs) for decisions phrased indirectly that the wording rules miss. A finding is kept only if its quote is found word for word in the source, and it is labelled **Found by AI**. Limited to 40 runs per site per day.
+- **AI pass, on request**: **Find more with AI** asks an Atlassian-hosted model (Forge LLMs) for decisions phrased indirectly that the wording rules miss. A finding is kept only if its quote is found word for word in the source, and it is labelled **Found by AI**. A usage counter targets 40 runs per site per day; this is not a strict concurrent-request cap.
 - **Rovo agent** "Decision Drift Radar": ask in Rovo chat which decisions may affect an issue or a project. It runs the same scan through two read-only actions and answers with the quote, the source link and the reasons. It cannot change Jira; reviews and notes stay in the app.
-- **Try with sample data**: the same analysis on a small bundled project, for sites that have no decision pages yet. It reads and writes nothing on the site.
+- **Try with sample data**: the same analysis on a small bundled project, for sites that have no decision pages yet. The baseline sample does not read or change Jira or Confluence data.
 - Scoped Confluence page search for pages mentioning the project key.
 - Decision extraction (`src/domain/`) over issue descriptions, issue comments and those Confluence pages: decisions, open questions and proposals, each with a quote, source link, wording signals, and the reasons it may affect a Jira issue.
 - Jira issue panel showing the decisions that point at the open issue.
 - Shared per-project review state: teammates can mark a finding relevant or dismiss it, with the review date retained in Forge storage.
 - Source links, permission-aware errors, and warnings when Confluence cannot be reached.
-- One Jira write, always confirmed by a person: once a finding is marked relevant, a teammate can edit a note and post it as a comment on an affected issue, with the quote and source link. Each note is recorded so it is not posted twice. Reviews alone never change Jira.
+- One Jira write, always confirmed by a person: once a finding is marked relevant, a teammate can edit a note and post it as a comment on an affected issue, with the quote and source link. Successful notes are recorded to suppress repeat posting in the normal workflow; simultaneous requests or a failed receipt write are not covered by an atomic exactly-once guarantee. Reviews alone never change Jira.
 
 ## Local setup
 

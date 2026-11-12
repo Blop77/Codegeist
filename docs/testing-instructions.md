@@ -30,7 +30,7 @@ The app calls no external services, and all data stays in Atlassian. The optiona
 1. In Jira, open **Apps → Decision Drift Radar**.
 2. Select **Try with sample data**.
 
-This runs the real analysis on a small fictional project bundled with the app. It reads and writes nothing on your site. You should see four decisions, two open questions and one proposal. Each finding shows the quoted evidence, the wording signals, and the issues it may affect with the reasons, for example:
+This runs the real analysis on a small fictional project bundled with the app. The baseline sample does not read or change Jira or Confluence data. Its optional AI pass stores usage/cooldown records in Forge storage. You should see four decisions, two open questions and one proposal. Each finding shows the quoted evidence, the wording signals, and the issues it may affect with the reasons, for example:
 
 > **PAY-103 · relevance 0.85**
 > • Shares terms with the issue: "confirmation", "mail", "old", "relay"
@@ -109,5 +109,11 @@ The agent runs the same scan and answers with the decision, its exact quote, a l
 ## What the app does not do
 
 - It never edits issue fields, statuses or assignees. Its only change to Jira is the comment you confirm.
-- It reads the 50 most recently updated issues in a project and up to 20 pages per scan.
-- The main scan works on English text with explicit decision wording and uses no AI model, so the same input always gives the same findings. The optional AI pass finds indirectly worded decisions; it keeps a finding only if its quote is found word for word in the source, and it is limited to 40 runs per site per day.
+- It reads the 50 most recently updated issues, up to 20 project-key search pages, up to 10 additional team-space pages and up to 10 linked pages. Results depend on permissions and search/Graph indexing.
+- The main scan works on English text with explicit decision wording and uses no AI model, so the same input always gives the same findings. The optional AI pass finds indirectly worded decisions; it keeps a finding only if its quote is found word for word in the source, and a usage counter targets 40 runs per site per day, without an atomic concurrent-request guarantee. AI-pass findings are transient; issue panels and Rovo run the baseline scan.
+
+## Verification notes (12 November 2026)
+
+Production 3.0.0 was checked on the fresh `jiggzer.atlassian.net` site: sample results, a real test decision, review, posted comment and issue panel were observed. Rovo was unavailable on that site, so its agent was checked on the demo site instead. Jira may label project navigation **Space navigation**; use the same Apps entry within that space. Extra existing decision pages can add findings beyond the minimal test example, especially through Teamwork Graph.
+
+Posted-note receipts suppress repeat posts in the normal workflow. Concurrent requests or a storage failure after posting can still result in duplicates; check the issue's comments before retrying an uncertain write.
