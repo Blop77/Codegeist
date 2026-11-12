@@ -133,6 +133,8 @@ export interface SentenceContext {
   sourceTitle: string;
   /** True when the sentence sits under a heading such as "Decisions". */
   underDecisionHeading: boolean;
+  /** True when the sentence is a list item under a heading that only names decisions ("Decisions", "Decision log", "Agreed"). */
+  decisionListItem?: boolean;
 }
 
 /**

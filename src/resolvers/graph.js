@@ -100,7 +100,9 @@ export async function discoverViaGraph({ projectKey, projectId, cloudId, knownPa
     // 2. Decision pages in those spaces, even when they never mention the project key.
     if (spaceTeam.size > 0) {
       const spaceList = [...spaceTeam.keys()].map(quote).join(',');
-      const cql = `type = page AND space in (${spaceList}) AND (text ~ "decision" OR text ~ "decided" OR text ~ "agreed") ORDER BY lastmodified DESC`;
+      // Pages titled as decision records. Matching body text instead pulls in templates whose
+      // instructions mention decisions (DACI, premortems, meeting-note templates).
+      const cql = `type = page AND space in (${spaceList}) AND (title ~ "decision" OR title ~ "decisions" OR title ~ "decided" OR title ~ "agreed" OR title ~ "ADR") AND NOT title ~ "template" ORDER BY lastmodified DESC`;
       for (const page of await confluencePages(cql, MAX_SPACE_PAGES)) {
         if (known.has(String(page.id))) continue;
         const entry = spaceTeam.get(page.space?.key) ?? [...spaceTeam.values()][0];

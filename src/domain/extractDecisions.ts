@@ -108,8 +108,8 @@ export const defaultClassifier: SentenceClassifier = (sentence, ctx) => {
   if (PROPOSAL.test(sentence)) {
     return { kind: 'proposal', confidence: 0.6, reasons: ['Uses proposal wording such as "we should" or "probably"'] };
   }
-  if (ctx.underDecisionHeading && !isQuestion && !REFERENCE_LINE.test(sentence) && contentWords(sentence) >= 4) {
-    return { kind: 'decision', confidence: 0.6, reasons: ['Listed under a decisions heading'] };
+  if (ctx.decisionListItem && !isQuestion && !REFERENCE_LINE.test(sentence) && contentWords(sentence) >= 4) {
+    return { kind: 'decision', confidence: 0.6, reasons: ['Listed as an item under a Decisions heading'] };
   }
   return null;
 };
@@ -124,6 +124,8 @@ const BARE_HEADING =
 const LABEL_HEADING = /^\s*([^.!?:]{1,60}):\s*$/;
 const DECISION_HEADING = /\b(?:decisions?|decision log|outcomes?|agreed|agreements?|resolutions?|conclusions?)\b/i;
 const LIST_MARKER = /^\s*(?:[-*•‣◦]|\d{1,3}[.)]|\[[ xX]\])\s+/;
+/** Headings that only name a list of decisions. Prose under them, or under "Outcomes" or "Conclusion", is not assumed to be a decision. */
+const DECISION_LIST_HEADING = /^\s*(?:key\s+)?(?:decisions?|decision log|decisions made|decided|agreed|agreements?|resolutions?)\s*:?\s*$/i;
 
 interface Sentence {
   text: string;
@@ -161,8 +163,9 @@ function sentencesIn(text: string, from: number, to: number): Sentence[] {
 }
 
 /** Yields each sentence with whether it sits under a decisions heading. */
-function* walkSentences(text: string): Generator<Sentence & { underDecisionHeading: boolean }> {
+function* walkSentences(text: string): Generator<Sentence & { underDecisionHeading: boolean; decisionListItem: boolean }> {
   let underDecisionHeading = false;
+  let decisionListHeading = false;
   let lineStart = 0;
   while (lineStart <= text.length) {
     let lineEnd = text.indexOf('\n', lineStart);
@@ -171,10 +174,12 @@ function* walkSentences(text: string): Generator<Sentence & { underDecisionHeadi
     const heading = line.trim() ? headingOf(line) : null;
     if (heading !== null) {
       underDecisionHeading = DECISION_HEADING.test(heading);
+      decisionListHeading = DECISION_LIST_HEADING.test(heading);
     } else if (line.trim()) {
       const marker = LIST_MARKER.exec(line);
       const contentStart = lineStart + (marker ? marker[0].length : 0);
-      for (const s of sentencesIn(text, contentStart, lineEnd)) yield { ...s, underDecisionHeading };
+      const decisionListItem = decisionListHeading && marker !== null;
+      for (const s of sentencesIn(text, contentStart, lineEnd)) yield { ...s, underDecisionHeading, decisionListItem };
     }
     lineStart = lineEnd + 1;
   }
@@ -355,7 +360,12 @@ function isSameStatement(a: Draft, b: Draft): boolean {
 function extractFromSource(source: SourceRecord, classify: SentenceClassifier): Draft[] {
   const drafts: Draft[] = [];
   for (const sentence of walkSentences(source.text)) {
-    const ctx: SentenceContext = { sourceType: source.type, sourceTitle: source.title, underDecisionHeading: sentence.underDecisionHeading };
+    const ctx: SentenceContext = {
+      sourceType: source.type,
+      sourceTitle: source.title,
+      underDecisionHeading: sentence.underDecisionHeading,
+      decisionListItem: sentence.decisionListItem,
+    };
     let cls: SentenceClassification | null;
     try {
       cls = classify(sentence.text, ctx);

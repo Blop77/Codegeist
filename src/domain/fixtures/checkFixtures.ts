@@ -264,7 +264,7 @@ check('MC demo: one decision, no disclaimer, MC-9 flagged as drift, listed issue
 });
 
 check('reference lines under a decisions heading are not decisions', () => {
-  const heading = { sourceType: 'confluence_page' as const, sourceTitle: 'Launch sync', underDecisionHeading: true };
+  const heading = { sourceType: 'confluence_page' as const, sourceTitle: 'Launch sync', underDecisionHeading: true, decisionListItem: true };
   for (const sentence of ['Related Jira issues: MC-1, MC-5, MC-9, MC-10.', 'See also: PAY-101 and PAY-104.', 'Owners: Priya and Marcus.', 'MC-1, MC-5, MC-9 and MC-10.']) {
     assert.equal(defaultClassifier(sentence, heading), null, sentence);
   }
@@ -292,6 +292,16 @@ check('AI proposals are kept only when the quote is verbatim, new and well forme
   assert.ok(c.confidenceReasons.includes('AI note: states the page status'));
   assert.deepEqual(verifyProposedFindings(mcDemoInput, r.candidates.map((x) => ({ sourceId: x.source.id, quote: x.evidence.quote, kind: x.kind })), [...known, ...r.candidates]).candidates, []);
   assert.deepEqual(verifyProposedFindings(mcDemoInput, 'nonsense' as never).candidates, []);
+});
+
+check('only list items under a Decisions heading fall back to decisions', () => {
+  const run = (text: string) => extractDecisions({ sources: [{ id: 's', type: 'confluence_page', title: 'DACI: Enablement approach', url: '', text, projectKey: 'PAY', updatedAt: '2026-11-01T00:00:00Z' }], issues: [] }).candidates;
+  // Template prose under decision-like headings is not a decision.
+  assert.deepEqual(run(['## Decision', 'This document outlines the decision-making process for training options.', '## Outcomes', 'An hour ago, you felt the project was going along just fine.', '## Conclusion', 'Key factors include cost, speed of onboarding, and quality.'].join('\n')), []);
+  // A bulleted item under "Decisions" still counts.
+  const items = run(['## Decisions', '- Virtual async training for all new hires from January.', 'Prose under the heading is ignored for now.'].join('\n'));
+  assert.equal(items.length, 1);
+  assert.equal(items[0].summary, 'Virtual async training for all new hires from January.');
 });
 
 if (failures > 0) {
