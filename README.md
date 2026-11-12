@@ -48,8 +48,13 @@ Run the tests with `npm test` (Node 22.18 or later; no install needed). It runs 
 
 See [Atlassian's Jira Forge tutorial](https://developer.atlassian.com/platform/forge/build-a-hello-world-app-in-jira/) for the current CLI and install flow.
 
+## Accuracy
+
+The rule-based extractor is measured on 16 real, openly licensed meeting-notes files from the OpenJS Foundation and the Rust project, labelled by hand. Half were used to tune the rules; the other half were labelled afterwards and held out. On the held-out notes, 67% of what it flags is a real decision, open question or proposal, and it finds 70% of them. Every decision it flagged was a real decision, but it finds only about a quarter of the decisions in real notes. That gap is what the optional AI pass targets. Method, labels, every miss and false alarm: [benchmark/](benchmark/README.md). Run it with `npm run benchmark`.
+
 ## Project docs
 
+- [Accuracy benchmark](benchmark/README.md): method, labels and held-out results on real meeting notes
 - [Testing instructions](docs/testing-instructions.md): install the app on your own site and try it, with or without your own data
 - [Demo notes](docs/demo.md): current deployment and install status, scan steps, and sample-data limits
 - [Product brief](docs/project-brief.md)

@@ -62,7 +62,17 @@ const EXPLICIT: Array<{ re: RegExp; confidence: number; reason: string; unless?:
     confidence: 0.8,
     reason: 'Says the team decided or agreed',
   },
-  { re: /\b(?:decided|agreed)\s+(?:to|that|on)\b/i, confidence: 0.8, reason: 'Says something was decided or agreed' },
+  { re: /\b(?:decided|agreed)\s+(?:to|that|on|upon|against)\b/i, confidence: 0.8, reason: 'Says something was decided or agreed' },
+  {
+    re: /^\s*(?:decide|agree|resolve)[ds]?\s+(?:to|that|on|against)\b/i,
+    confidence: 0.7,
+    reason: 'Starts with an agenda outcome such as "Decide to…"'
+  },
+  {
+    re: /\b(?:general|broad|full|unanimous|rough|clear)\s+(?:agreement|consensus)\b|\b(?:there was|we reached|reached|have)\s+(?:a\s+)?(?:general\s+|broad\s+)?(?:agreement|consensus)\b|^\s*consensus\s*[:\-–]/i,
+    confidence: 0.7,
+    reason: 'Records agreement or consensus'
+  },
   { re: /\bfinal (?:call|decision)\b/i, confidence: 0.8, reason: 'Calls it a final decision' },
   { re: /\b(?:we(?:'ll| will| are|'re))\s+(?:going\s+(?:with|to go with)|go(?:ing)? with)\b/i, confidence: 0.65, reason: 'States what the team is going with' },
   { re: APPROVAL, confidence: 0.6, reason: 'Mentions an approval', unless: NEGATED_APPROVAL },
@@ -70,9 +80,16 @@ const EXPLICIT: Array<{ re: RegExp; confidence: number; reason: string; unless?:
 ];
 
 const PROPOSAL =
-  /\b(?:we should|we could|let'?s|i propose|we propose|proposal|recommend(?:ation)?|suggest(?:ion)?|plan is to|leaning (?:towards?)|probably|tentatively|likely (?:go|going) with)\b/i;
+  /\b(?:we should|we could|let'?s|i propose|we propose|proposals?\s+(?:to|is|for)|recommend(?:ation)?|suggest(?:ion)?|plan is to|leaning (?:towards?)|probably|tentatively|likely (?:go|going) with)\b|^\s*proposal\b|\b(?:i|we)\s+(?:think|feel(?:\s+like)?|believe)\s+(?:that\s+)?we\s+(?:need|should|could|might)\b/i;
 
 const DECISION_QUESTION = /\b(?:should we|do we|are we|can we|will we|which|whether)\b/i;
+
+/**
+ * A question asked as its own sentence about what is allowed, needed or chosen ("Is AI-assisted
+ * development allowed?", "Should there be a lang FCP for this?"), as in agenda items. Lines that
+ * start with a speaker name ("josh: which case are we in?") are conversation, not agenda items.
+ */
+const STANDALONE_QUESTION = /^\s*(?:is|are|should|must|do|does|can|could|will|would|what|which|who|when|how)\s+[^:]{3,}\?\s*$/i;
 
 /** Lines that only point elsewhere ("Related Jira issues: MC-1, MC-5."), never a decision on their own. */
 const REFERENCE_LINE = /^\s*(?:related|linked|see(?: also)?|tracked in|tracking|references?|links?|jira(?: issues?| tickets?)?|issues?|tickets?|owners?|attendees|status)\b[^:]{0,30}:/i;
@@ -83,7 +100,9 @@ function contentWords(sentence: string): number {
 }
 
 /** The built-in rules. Exported so a custom classifier can fall back to them. */
-export const defaultClassifier: SentenceClassifier = (sentence, ctx) => {
+export const defaultClassifier: SentenceClassifier = (raw, ctx) => {
+  // Confluence and Jira often store typographic apostrophes ("Let’s"); the rules use straight ones.
+  const sentence = raw.replace(/[‘’ʼ]/g, "'");
   if (SELF_REFERENCE.some((re) => re.test(sentence))) return null;
   if (DISCLAIMER.some((re) => re.test(sentence))) return null;
   const isQuestion = sentence.trim().endsWith('?');
@@ -105,7 +124,11 @@ export const defaultClassifier: SentenceClassifier = (sentence, ctx) => {
   if (isQuestion && DECISION_QUESTION.test(sentence)) {
     return { kind: 'open_question', confidence: 0.6, reasons: ['Asks a question that is not answered in the same sentence'] };
   }
-  if (PROPOSAL.test(sentence)) {
+  if (isQuestion && STANDALONE_QUESTION.test(sentence)) {
+    return { kind: 'open_question', confidence: 0.5, reasons: ['Asks what is allowed, needed or chosen, as an agenda item would'] };
+  }
+  // Questions and lead-ins to a list ("we should be able to have:") are not proposals.
+  if (PROPOSAL.test(sentence) && !isQuestion && !/:\s*$/.test(sentence)) {
     return { kind: 'proposal', confidence: 0.6, reasons: ['Uses proposal wording such as "we should" or "probably"'] };
   }
   if (ctx.decisionListItem && !isQuestion && !REFERENCE_LINE.test(sentence) && contentWords(sentence) >= 4) {

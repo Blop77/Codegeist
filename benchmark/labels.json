@@ -1,0 +1,124 @@
+{
+  "protocol": "Labelled by hand from the source files before the extractor was run on them. decision: the notes record that the group decided, agreed, approved or resolved something, or reached consensus. open_question: a question about what to do that the notes leave unresolved (questions answered later in the notes are not labelled). proposal: a suggestion put to the group that is not recorded as decided. ambiguous: true marks borderline sentences (action items, deferrals, agenda boilerplate, tentative plans, answered or rhetorical questions); they count neither for nor against the extractor. Each label text is a verbatim span of the prepared document, compared after whitespace and case normalisation.",
+  "documents": [
+    {
+      "file": "openjs-cpc-2025-08-05.md",
+      "labels": [
+        { "kind": "decision", "text": "Decide to ask for board and/or legal advice" },
+        { "kind": "decision", "text": "pause decisions until then" },
+        { "kind": "decision", "text": "Need to wait on other CoC issues around privacy and potentially adapt V3 accordingly", "ambiguous": true },
+        { "kind": "open_question", "text": "What version of the Contributor Covenant Code of Conduct should we use?" },
+        { "kind": "open_question", "text": "Is AI-assisted development allowed?" },
+        { "kind": "open_question", "text": "continuity policy and package registries?", "ambiguous": true },
+        { "kind": "open_question", "text": "Are there any initiatives or agenda items that we should use a working session to further progress on?", "ambiguous": true },
+        { "kind": "proposal", "text": "Proposal To Add A SERVICES.md or similar documentation to OpenJS Projects" }
+      ]
+    },
+    {
+      "file": "openjs-cpc-2025-08-19.md",
+      "labels": [
+        { "kind": "proposal", "text": "Board deck? → perhaps send to the private cpc email list", "ambiguous": true },
+        { "kind": "open_question", "text": "What version of the Contributor Covenant Code of Conduct should we use?" },
+        { "kind": "open_question", "text": "Is AI-assisted development allowed?" },
+        { "kind": "open_question", "text": "continuity policy and package registries?", "ambiguous": true },
+        { "kind": "open_question", "text": "Are there any initiatives or agenda items that we should use a working session to further progress on?", "ambiguous": true },
+        { "kind": "proposal", "text": "Proposal To Add A SERVICES.md or similar documentation to OpenJS Projects" }
+      ]
+    },
+    {
+      "file": "openjs-cpc-2025-09-16.md",
+      "labels": [
+        { "kind": "open_question", "text": "What version of the Contributor Covenant Code of Conduct should we use?" },
+        { "kind": "open_question", "text": "Is AI-assisted development allowed?" },
+        { "kind": "open_question", "text": "Are there any initiatives or agenda items that we should use a working session to further progress on?", "ambiguous": true },
+        { "kind": "proposal", "text": "Proposal To Add A SERVICES.md or similar documentation to OpenJS Projects" }
+      ]
+    },
+    {
+      "file": "openjs-cpc-2025-09-30.md",
+      "labels": [
+        { "kind": "decision", "text": "It was agreed that Ben would ask the project to revert their merge so that the CPC would be able to comment." },
+        { "kind": "decision", "text": "Additionally we would ask for a clearer description of the TSC composition (for example min/max size, how folks are elected).", "ambiguous": true },
+        { "kind": "decision", "text": "Impact project should not go through the form." },
+        { "kind": "decision", "text": "The issue and form will be fixed to address this.", "ambiguous": true },
+        { "kind": "decision", "text": "General agreement that this is a good idea, decision to move forward and to include deliverables/outcomes in the proposal." },
+        { "kind": "decision", "text": "General agreement that we don't want to formalize this by creating a policy." },
+        { "kind": "decision", "text": "Instead, we want to lead by example by improving the charter template through better defaults and clearer instructions.", "ambiguous": true },
+        { "kind": "proposal", "text": "Next steps would be a pull request that clarifies in the PROJECT_PROGRESSION file that the template is the source of truth for what belongs in the charter, and adds better defaults an guidance to the charter.", "ambiguous": true },
+        { "kind": "proposal", "text": "This seems a good topic to move forward in the next working session.", "ambiguous": true },
+        { "kind": "decision", "text": "The CPC decided against this; if you're making changes to the charter, you need to run those changes to the CPC, unless those are strictly editorial." },
+        { "kind": "decision", "text": "Wait on outcome of #1654", "ambiguous": true },
+        { "kind": "decision", "text": "Closing as program was sunset.", "ambiguous": true },
+        { "kind": "decision", "text": "Let's look at it during the working session next week.", "ambiguous": true },
+        { "kind": "decision", "text": "The working session will focus on improving the default charter template and charter reviews:", "ambiguous": true },
+        { "kind": "open_question", "text": "Is AI-assisted development allowed?" },
+        { "kind": "open_question", "text": "What version of the Contributor Covenant Code of Conduct should we use?" },
+        { "kind": "open_question", "text": "Are there any initiatives or agenda items that we should use a working session to further progress on?", "ambiguous": true },
+        { "kind": "proposal", "text": "Proposal To Add A SERVICES.md or similar documentation to OpenJS Projects" }
+      ]
+    },
+    {
+      "file": "rust-lang-team-2022-11-22.md",
+      "labels": [
+        { "kind": "decision", "text": "Closing since the meeting has happened", "ambiguous": true },
+        { "kind": "decision", "text": "josh: let's treat them separately, but file concerns for both" },
+        { "kind": "decision", "text": "So let's do it!", "ambiguous": true },
+        { "kind": "proposal", "text": "josh: you should make fcp+concern 3349, scott!", "ambiguous": true },
+        { "kind": "proposal", "text": "gary: if it's not a breaking change then we can just accept it now and change it later" },
+        { "kind": "proposal", "text": "felix: I feel like we need a design meeting about this stuff now, before we lift restrictions to make then uniform." },
+        { "kind": "proposal", "text": "josh: we could certainly add a lint", "ambiguous": true },
+        { "kind": "proposal", "text": "scott: we could change how it works in array lengths, and it'd just add more lints for unnecessary unsafe blocks", "ambiguous": true },
+        { "kind": "proposal", "text": "Team member @joshtriplett has proposed to merge this.", "ambiguous": true },
+        { "kind": "proposal", "text": "Team member @pnkfelix has proposed to merge this.", "ambiguous": true },
+        { "kind": "proposal", "text": "Team member @scottmcm has proposed to merge this.", "ambiguous": true },
+        { "kind": "open_question", "text": "scottmcm: Is https://github.com/rust-lang/rust/issues/86730 a blocker?", "ambiguous": true },
+        { "kind": "open_question", "text": "josh: does it need a meeting or just a proposal?", "ambiguous": true },
+        { "kind": "open_question", "text": "scott: do we need a concern on *this* RFC for the `unsafe` behaviour?" },
+        { "kind": "open_question", "text": "Is it a blocker?" },
+        { "kind": "open_question", "text": "Should there be a lang FCP for this?" },
+        { "kind": "open_question", "text": "How does this compare to things like `ud2`s from `unreachable_unchecked()` or not-actually-diverging `->`s?", "ambiguous": true },
+        { "kind": "open_question", "text": "gary: could we change `async` too?", "ambiguous": true },
+        { "kind": "open_question", "text": "scott: is it breaking to remove the requirement?", "ambiguous": true },
+        { "kind": "open_question", "text": "scott: maybe `must_use` already does?", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-traits-wg-2019-02-24.md",
+      "labels": [
+        { "kind": "decision", "text": "Ultimately we identified the following next steps:", "ambiguous": true },
+        { "kind": "decision", "text": "Schedule a meeting to dig into some of the lifetime problems around async-await.", "ambiguous": true },
+        { "kind": "decision", "text": "Explore the use cases for lazy normalization, trying to create a summary of exactly which test cases are causing problems and why, and what it might take to fix them (can it be done without a full chalk transition?).", "ambiguous": true },
+        { "kind": "decision", "text": "Get tests plus FCP around `type Foo = impl Bar` (centril)", "ambiguous": true },
+        { "kind": "open_question", "text": "It seems likely that we could do an initial impl of GATs in rustc without chalk, but would it be enough?" },
+        { "kind": "open_question", "text": "Schedule a meeting to dig into the chalk transition -- what is current status and what are the possible future routes, what should we be exploring?", "ambiguous": true },
+        { "kind": "proposal", "text": "A likely set of initial subprojects will contain:", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-traits-wg-2019-03-04.md",
+      "labels": [
+        { "kind": "decision", "text": "We discussed how we found a way to resolve the `async fn` complications by changing the async fn desugaring, and hence don't need any deep trait action.", "ambiguous": true },
+        { "kind": "decision", "text": "Current plan to continue documenting the way that the current normalization code plays out and to hold some sort of meeting to document that and walk through it.", "ambiguous": true },
+        { "kind": "proposal", "text": "We are thinking that integrating Chalk first into the RLS 2.0 project may be a better idea than starting with rustc, particularly as it can help get RLS 2.0 to a \"working product\" faster, but also because we may be able to use that to pursue the idea of sharing more code between chalk + compiler than we could readily do with rustc." },
+        { "kind": "proposal", "text": "Once we do make progress, though, the logical next step is probably to try and model those use cases some in Chalk, as well as to investigate more deeply how rustc could be extended to handle the cases natively (without blocking on full chalk integration).", "ambiguous": true },
+        { "kind": "decision", "text": "We settled on the following plans for the coming week:" },
+        { "kind": "open_question", "text": "Maybe discuss other chalk improvements?", "ambiguous": true },
+        { "kind": "open_question", "text": "Maybe discuss the \"lifetime capture\" problem in impl Trait?", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-traits-wg-2019-03-11.md",
+      "labels": [
+        { "kind": "open_question", "text": "In general, it's still not entirely clear if the \"cycle\" that gives rise to the need for lazy normalization is something we can easily circumvent.", "ambiguous": true },
+        { "kind": "decision", "text": "Next step: re-establish the cycle in those queries so it can be observed.", "ambiguous": true },
+        { "kind": "proposal", "text": "Next step: unclear, but probably to investigate the use cases and make some comments.", "ambiguous": true },
+        { "kind": "decision", "text": "We decided we'd rather try to do the chalk integration into RLS 2.0 \"correct\", meaning that we can share a lot more code with chalk." },
+        { "kind": "decision", "text": "Next step: nikomatsakis to schedule some time to sketch out what chalk integration would look like.", "ambiguous": true },
+        { "kind": "decision", "text": "This didn't happen and we'll probably shelve it for now in favor of the previous point.", "ambiguous": true },
+        { "kind": "decision", "text": "This didn't happen and we'll probably shelve it for now in favor of the next point.", "ambiguous": true },
+        { "kind": "open_question", "text": "Maybe discuss other chalk improvements?", "ambiguous": true },
+        { "kind": "open_question", "text": "Maybe discuss the \"lifetime capture\" problem in impl Trait?", "ambiguous": true }
+      ]
+    }
+  ]
+}
