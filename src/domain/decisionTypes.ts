@@ -69,6 +69,8 @@ export interface AffectedIssue {
   relevance: number;
   /** Observable wording in the current issue. Omitted when the scan has no clear change evidence. */
   wordingStatus?: 'outdated' | 'replacement-found';
+  /** With `wordingStatus: 'outdated'`: the phrase the issue still uses, which the decision replaces or removes. */
+  outdatedWording?: string;
   /** One entry per signal that contributed. Never empty. */
   reasons: string[];
 }

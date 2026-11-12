@@ -29,6 +29,7 @@ The link installs the production build. The app sends no data outside Atlassian;
 - Scoped Confluence page search for pages mentioning the project key.
 - Decision extraction (`src/domain/`) over issue descriptions, issue comments and those Confluence pages: decisions, open questions and proposals, each with a quote, source link, wording signals, and the reasons it may affect a Jira issue.
 - Jira issue panel showing the decisions that point at the open issue.
+- **A radar with memory**: each scan records when a finding was first seen and which issues still use wording a decision replaced. Findings first seen since your last visit are labelled **New since your last visit**, and a summary shows how many issues are still drifting and how many are resolved. A drift is marked **Resolved** when the issue stops using the replaced wording, on the next scan or as soon as the issue is edited (a Jira issue-update trigger checks only issues with an open drift).
 - Shared per-project review state: teammates can mark a finding relevant or dismiss it, with the review date retained in Forge storage.
 - Source links, permission-aware errors, and warnings when Confluence cannot be reached.
 - One Jira write, always confirmed by a person: once a finding is marked relevant, a teammate can edit a note and post it as a comment on an affected issue, with the quote and source link (or post a Rovo draft from the issue panel). The app reserves each finding and issue before posting and can recover a missing receipt from the Jira comment. Reviews alone never change Jira.

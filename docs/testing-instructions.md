@@ -87,6 +87,10 @@ You should see:
 
 **8. Verify the correction.** In Jira, replace the scheduling line you added to the issue with `Scheduling: this work follows one shared launch plan.` Save and scan again. `KEY-1` now shows **Replacement wording found**. Its reason says that the issue mentions “one shared launch plan” and no longer mentions “separate channel plans”. The existing comment remains available. Radar checks the wording on each scan. Deleting the old wording alone does not produce this status.
 
+The radar also remembers the drift. Before the edit, the **Radar** summary under the scan line counted `KEY-1` as still drifting, with "Drifting since …" under it. After the edit, `KEY-1` shows **Resolved** · "No longer mentions “separate channel plans”", and the summary counts it as resolved. You don't need to scan: a few minutes after you save the issue, Jira notifies the app, and the issue panel and the next scan show "noticed when the issue was edited". If you scan straight away, it shows "found by a later scan" instead.
+
+**9. See what's new.** Add another decision paragraph to your Confluence page, for example `Decision: We agreed to publish release notes on Fridays instead of Mondays. Related Jira issues: KEY-1.` Wait a minute for search indexing, and scan again. The new decision has a **New since your last visit** label, and the summary counts it. On your first visit nothing is labelled new, because there is no earlier visit to compare with.
+
 ## Part 3: Teamwork Graph with your own team (about five minutes)
 
 This part shows decisions that live in a team's own Confluence space and never mention the project key. Only the Teamwork Graph connects them to the project.
@@ -152,6 +156,7 @@ To try a Rovo draft, choose an affected issue without a posted note and ask **�
 ## What the app does not do
 
 - It never edits issue fields, statuses or assignees. Its only change to Jira is the comment you confirm in Jira.
+- Its issue-update trigger only marks a tracked drift resolved; it does not find new decisions in the background. New findings appear when someone scans or opens the issue panel.
 - It reads the 50 most recently updated issues, up to 20 project-key search pages, up to 10 additional team-space pages and up to 10 linked pages. Results depend on permissions and search/Graph indexing.
 - The main scan works on English text with explicit decision wording and uses no AI model, so the same input always gives the same findings. The optional AI pass finds indirectly worded decisions; it keeps a finding only if its quote is found word for word in the source, and a usage counter targets 40 runs per site per day, without an atomic concurrent-request guarantee. Verified AI-pass findings are saved per project, checked again against the current sources on every scan, and shown on the project page, the issue panel and in Rovo; they disappear if their quote is no longer in the source. **Draft with AI** counts towards the same daily limit.
 

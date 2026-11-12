@@ -2,6 +2,7 @@
 import { scanIssue, scanProject, validProjectKey } from '../resolvers/scan';
 import { findWithAi } from '../resolvers/ai';
 import { attachReviewState, validReviewTarget } from '../resolvers/notes';
+import { trackScan } from '../resolvers/drift';
 import { prepareRovoDraft } from '../resolvers/rovo-drafts';
 
 const MAX_FINDINGS = 15;
@@ -55,8 +56,10 @@ function toFinding(candidate, origin) {
       relevance: affected.relevance,
       reasons: affected.reasons,
       wordingStatus: affected.wordingStatus ?? null,
+      drift: driftView(affected.drift),
       notePosted: Boolean(candidate.notes?.[affected.issueKey])
-    }))
+    })),
+    resolvedIssues: (candidate.resolvedIssues ?? []).map((resolved) => ({ issueKey: resolved.issueKey, ...driftView(resolved) }))
   };
 }
 
@@ -110,8 +113,18 @@ function issueKeyFrom(payload) {
 async function withReviews(projectKey, scanned) {
   if (!scanned.ok) return scanned;
   const all = [...scanned.candidates, ...(scanned.aiCandidates ?? [])];
-  const { candidates } = await attachReviewState(projectKey, all);
+  const { candidates: reviewed } = await attachReviewState(projectKey, all);
+  const scannedIssueKeys = scanned.rawIssues ? scanned.rawIssues.map((issue) => issue.key) : [scanned.rawIssue.key];
+  const { candidates } = await trackScan(projectKey, { candidates: reviewed, scannedIssueKeys });
   return { ...scanned, candidates: candidates.slice(0, scanned.candidates.length), aiCandidates: candidates.slice(scanned.candidates.length) };
+}
+
+/** Drift state for the agent: whether the issue still uses the replaced wording, and since when. */
+function driftView(drift) {
+  if (!drift) return null;
+  return drift.status === 'resolved'
+    ? { status: 'resolved', phrase: drift.phrase, resolvedOn: String(drift.resolvedAt ?? '').slice(0, 10), resolvedBy: drift.resolvedBy === 'issue-update' ? 'an edit to the issue' : 'a later scan' }
+    : { status: 'still drifting', phrase: drift.phrase, since: String(drift.firstSeenAt ?? '').slice(0, 10) };
 }
 
 /** The person talking to the agent. Forge passes it in the action context. */

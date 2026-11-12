@@ -8,7 +8,7 @@
     "start": "forge tunnel",
     "test": "npm run test:domain && npm run test:resolvers",
     "test:domain": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/register.mjs src/domain/fixtures/checkFixtures.ts",
-    "test:resolvers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/register.mjs --test test/resolvers.test.ts test/graph.test.ts"
+    "test:resolvers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/register.mjs --test test/resolvers.test.ts test/graph.test.ts test/drift.test.ts"
   },
   "dependencies": {
     "@forge/api": "^6.0.0",

@@ -151,6 +151,11 @@ function issueText(issue: IssueRecord): string {
   return `${issue.title}\n${issue.description ?? ''}`;
 }
 
+/** True when the issue's title or description still uses `phrase`, matched as in `matchIssues`. */
+export function issueStillMentions(issue: Pick<IssueRecord, 'title' | 'description'>, phrase: string): boolean {
+  return containsPhrase(`${issue.title ?? ''}\n${issue.description ?? ''}`, phrase);
+}
+
 /** Precomputes per-project term statistics. Issues must already be validated. */
 export function buildIssueIndex(issues: IssueRecord[]): IssueIndex {
   const byProject = new Map<string, ProjectIndex>();
@@ -283,7 +288,8 @@ export function matchIssues(subject: MatchSubject, index: IssueIndex): AffectedI
       issueKey: issue.key,
       relevance,
       reasons: parts.map(([, reason]) => reason),
-      ...(wordingStatus && { wordingStatus })
+      ...(wordingStatus && { wordingStatus }),
+      ...(wordingStatus === 'outdated' && oldTerm !== undefined && { outdatedWording: oldTerm })
     });
   }
   return out.sort((a, b) => b.relevance - a.relevance || (a.issueKey < b.issueKey ? -1 : 1));

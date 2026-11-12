@@ -16,6 +16,8 @@ When you scan a project or open an issue, the app reads the following, using the
 - Confluence, if the app is installed there: pages whose text mentions the project key.
 - Atlassian's Teamwork Graph: the Atlassian teams linked to the scanned Jira project, those teams' Confluence spaces, and pages linked from the decision pages found. The app then reads decision pages in those spaces and the linked pages, as above.
 
+When an issue's summary or description is edited, Jira notifies the app. If the radar is tracking a drift on that issue, the app reads that one issue's summary and description as the app (not as a person), only to check whether the outdated wording is gone. Nothing from that read is shown to anyone or stored, apart from the time the drift was resolved.
+
 This content is analysed during the scan and returned to your browser. The app does not persist issue or page bodies as Forge storage records. Results are returned to the browser; operational error logs are a separate consideration below.
 
 ## The optional AI pass
@@ -33,9 +35,11 @@ The app stores a small amount of data in Forge storage for your site:
 - For the AI pass: a count of runs per day and the time of the last run per project, used to limit usage.
 - For AI-pass findings that passed the word-for-word check: per project, up to 30 entries, each with the source's id, the quoted sentence (one sentence copied from the page, description or comment), and its kind. They are kept so teammates see the same findings later, and are checked again against the current source on every scan. Running the AI pass again replaces older entries beyond the 30 newest.
 - When the Rovo agent prepares a note: its text, issue key, source evidence and expiry, stored under a key derived from the requesting account and issue. The draft is available to that teammate for ten minutes. The app checks source access again before showing or posting it. Forge expires the draft record.
+- The radar's history, one record per project: when each finding was first seen (by its generated id), and for each issue that still used wording a decision replaced, the issue key, that short phrase (for example "separate channel plans"), when the drift was first seen, and when and how it was resolved. Up to 300 findings and 300 drifts per project; the oldest resolved entries are dropped first. The app shows this history only alongside findings the viewer's own scan returned.
+- When you last opened a project's radar, keyed by a hash of your account ID and the project key, so findings first seen after your last visit can be labelled new.
 - While posting a Jira note: a random attempt ID and timestamp. The app adds the ID as a Jira comment property so it can recover a missing receipt without writing a second comment.
 
-Review, note and AI-usage records are keyed by project key and a generated id for the finding, and contain no account ids, names, email addresses or source text. The saved AI findings contain short quotes from your content, and pending agent notes contain the note text and are keyed by a hash of the account ID, as described above.
+Review, note and AI-usage records are keyed by project key and a generated id for the finding, and contain no account ids, names, email addresses or source text. The saved AI findings and the radar's drift phrases contain short text from your content, and pending agent notes contain the note text and are keyed by a hash of the account ID, as described above.
 
 Atlassian may keep operational logs for Forge apps. The AI error handlers record a failure without including the model response. Other operational errors may still include request details.
 

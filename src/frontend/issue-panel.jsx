@@ -157,6 +157,7 @@ function IssuePanel() {
       )}
       {result?.notice && <SectionMessage appearance="information">{result.notice}</SectionMessage>}
       {result?.reviewWarning && <SectionMessage appearance="warning" title="Review history unavailable">{result.reviewWarning}</SectionMessage>}
+      {result?.radarWarning && <SectionMessage appearance="warning" title="Drift history unavailable">{result.radarWarning}</SectionMessage>}
       {candidates.length > 0 ? candidates.map((candidate) => (
         <CandidateCard
           key={candidate.id}

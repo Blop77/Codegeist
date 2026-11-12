@@ -32,7 +32,8 @@
             "Shares terms with the issue: “card”, “form”, “legacy”, “checkout”",
             "The issue still mentions “legacy card form”, which this decision replaces"
           ],
-          "wordingStatus": "outdated"
+          "wordingStatus": "outdated",
+          "outdatedWording": "legacy card form"
         },
         {
           "issueKey": "PAY-104",
@@ -76,7 +77,8 @@
             "Shares terms with the issue: “Guest”, “checkout”",
             "The issue still mentions “Guest checkout”, which this decision removes"
           ],
-          "wordingStatus": "outdated"
+          "wordingStatus": "outdated",
+          "outdatedWording": "Guest checkout"
         }
       ]
     },
@@ -111,7 +113,8 @@
             "Shares terms with the issue: “confirmation”, “SendGrid”, “email”, “Order”",
             "The issue still mentions “SendGrid”, which this decision replaces"
           ],
-          "wordingStatus": "outdated"
+          "wordingStatus": "outdated",
+          "outdatedWording": "SendGrid"
         }
       ]
     },
@@ -152,7 +155,8 @@
             "Shares terms with the issue: “Google”, “Analytics”, “Checkout”",
             "The issue still mentions “Google Analytics”, which this decision replaces"
           ],
-          "wordingStatus": "outdated"
+          "wordingStatus": "outdated",
+          "outdatedWording": "Google Analytics"
         }
       ]
     },
@@ -186,7 +190,8 @@
             "The decision is in a comment on PAY-107",
             "The issue still mentions “5”, which this decision replaces"
           ],
-          "wordingStatus": "outdated"
+          "wordingStatus": "outdated",
+          "outdatedWording": "5"
         }
       ]
     },

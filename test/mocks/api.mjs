@@ -10,6 +10,10 @@ export default {
     requestConfluence: async (path) => globalThis.__confluence(path, json),
     requestTeamworkGraph: async (query, variables, operationName) =>
       (globalThis.__twg ? globalThis.__twg(query, variables, json, operationName) : json({ data: {} }))
+  }),
+  // Calls made as the app (for example from a product-event trigger) are flagged with `asApp`.
+  asApp: () => ({
+    requestJira: async (path, options) => globalThis.__jira(path, json, { ...options, asApp: true })
   })
 };
 
