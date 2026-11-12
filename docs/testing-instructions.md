@@ -68,6 +68,7 @@ You should see:
 
 - **Decisions · 1**: "We agreed to use one shared launch plan instead of separate channel plans." with a link to your page.
 - Under **May affect**, `KEY-1` with these reasons:
+  - **Outdated wording found**
   - The same paragraph as the decision lists KEY-1
   - The issue still mentions "separate channel plans", which this decision replaces
 - **Open questions · 1**: "Do we need a second approver for the launch checklist?"
@@ -83,6 +84,8 @@ You should see:
 - Scan again: there is still one decision. The app's own comment is not read as a new decision, and `KEY-1` no longer offers to post the note.
 - Open `KEY-1`: the **Decision Drift Radar** panel on the issue shows the same decision, its review and the posted note.
 - Open the project and choose **Decision Drift Radar** in its sidebar (Jira labels it "Space navigation"): the app scans that project without asking for a key. On a new site the app may not be in the sidebar yet: use **Add to navigation**, then find it under **More**.
+
+**8. Verify the correction.** In Jira, replace the scheduling line you added to the issue with `Scheduling: this work follows one shared launch plan.` Save and scan again. `KEY-1` now shows **Replacement wording found**. Its reason says that the issue mentions “one shared launch plan” and no longer mentions “separate channel plans”. The existing comment remains available. Radar checks the wording on each scan. Deleting the old wording alone does not produce this status.
 
 ## Part 3: Teamwork Graph with your own team (about five minutes)
 
@@ -134,9 +137,7 @@ If Rovo is available on your site, the app adds an agent named **Decision Drift 
 
 The agent runs the same scan and answers with the decision, its exact quote, a link to your page, the reasons (starting with "The issue still mentions "separate channel plans", which this decision replaces"), and whether a teammate has reviewed it. You can also ask it to scan the project, or to **find more with AI**, which runs the AI pass.
 
-To close the gap from the chat, ask **"Draft a note for KEY-1 about this decision"**. The agent writes a short note and calls its prepare action, which changes nothing and returns the exact comment. It shows you the comment and asks whether to post it. Only after you say yes does it call the post action. The app then checks that the comment is exactly the one you were shown, that you are the person who prepared it, that this was within ten minutes, and that no teammate has dismissed the finding. The comment is posted in your name, the finding is marked relevant, and a second note for the same finding and issue is refused. If you start from an issue that already has a note from Part 2, use another affected issue or another finding.
-
-To try a Rovo draft, choose an affected issue without a posted note and ask the agent to draft a note for that finding. Open the issue's **Decision Drift Radar** panel and select **Load Rovo draft**. Check the exact note, quote, source and audience. Select **Post Rovo draft to KEY-1** if you want the comment posted. The draft expires after ten minutes. If the issue or source changes after preparation, make a new draft. Opening or loading the draft leaves Jira unchanged.
+To try a Rovo draft, choose an affected issue without a posted note and ask **“Draft a note for KEY-1 about this decision”**. Rovo asks for confirmation to prepare the draft. Open the issue's **Decision Drift Radar** panel and select **Load Rovo draft**. Check the exact note, quote, source and audience. Select **Post Rovo draft to KEY-1** if you want the comment posted. The draft expires after ten minutes. If the issue or source changes after preparation, make a new draft. Preparing and loading the draft leave Jira unchanged.
 
 ## If something looks wrong
 
@@ -150,12 +151,12 @@ To try a Rovo draft, choose an affected issue without a posted note and ask the 
 
 ## What the app does not do
 
-- It never edits issue fields, statuses or assignees. Its only change to Jira is the comment you confirm, in the app or in Rovo Chat.
+- It never edits issue fields, statuses or assignees. Its only change to Jira is the comment you confirm in Jira.
 - It reads the 50 most recently updated issues, up to 20 project-key search pages, up to 10 additional team-space pages and up to 10 linked pages. Results depend on permissions and search/Graph indexing.
 - The main scan works on English text with explicit decision wording and uses no AI model, so the same input always gives the same findings. The optional AI pass finds indirectly worded decisions; it keeps a finding only if its quote is found word for word in the source, and a usage counter targets 40 runs per site per day, without an atomic concurrent-request guarantee. Verified AI-pass findings are saved per project, checked again against the current sources on every scan, and shown on the project page, the issue panel and in Rovo; they disappear if their quote is no longer in the source. **Draft with AI** counts towards the same daily limit.
 
 ## Verification notes (12 November 2026)
 
-Production 3.0.0 was checked on the fresh `jiggzer.atlassian.net` site: sample results, a real test decision, review, posted comment and issue panel were observed. Rovo was unavailable on that site, so its agent was checked on the demo site instead. Jira may label project navigation **Space navigation**; use the same Apps entry within that space. Extra existing decision pages can add findings beyond the minimal test example, especially through Teamwork Graph.
+Production 3.3.0 was checked on the judge test site. The sample scan worked, Teamwork Graph discovered a decision page that omitted the Jira project key, and the reviewed note appeared on the issue. A rescan offered no duplicate note. Rovo was unavailable on that site. Draft preparation and posting from the Jira issue panel were checked on the development demo site. Jira may label project navigation **Space navigation**; use the same Apps entry within that space. Extra existing decision pages can add findings beyond the minimal test example, especially through Teamwork Graph.
 
-Posted-note receipts suppress repeat posts in the normal workflow. Concurrent requests or a storage failure after posting can still result in duplicates; check the issue's comments before retrying an uncertain write.
+The app reserves the finding and issue before posting and can recover a missing receipt from the Jira comment. If a write remains uncertain, check the issue’s comments before retrying.

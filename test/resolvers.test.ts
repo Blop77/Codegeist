@@ -216,6 +216,9 @@ test('Rovo: findings carry ids, review state and how they were found', async () 
   assert.ok(found.findings.every((f: any) => /^dc_[a-f0-9]{16}$/.test(f.findingId)));
   assert.ok(found.findings.some((f: any) => f.foundBy === 'wording rules'));
   assert.ok(found.findings.every((f: any) => typeof f.review === 'string'));
+  const launchPlan = found.findings.find((f: any) => f.statement.includes('shared launch plan'));
+  const email = launchPlan?.affectedIssues.find((issue: any) => issue.issueKey === 'MC-9');
+  assert.equal(email?.wordingStatus, 'outdated');
 });
 
 async function prepareFromRovo(issueKey: string, contains: string, note?: string) {

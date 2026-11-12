@@ -236,13 +236,17 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
           {!hideIssueKeys && <Text><Strong>May affect</Strong></Text>}
           {candidate.affectedIssues.map((affected) => (
             <Stack key={affected.issueKey} space="space.025">
-              <Text>
-                {hideIssueKeys ? 'Why this issue' : (() => {
-                  const href = sample ? null : siteLink(siteUrl, issueUrls[affected.issueKey] ?? `/browse/${affected.issueKey}`);
-                  return href ? <Link href={href}>{affected.issueKey}</Link> : affected.issueKey;
-                })()}
-                {` · relevance ${affected.relevance.toFixed(2)}`}
-              </Text>
+              <Inline space="space.100" alignBlock="center">
+                <Text>
+                  {hideIssueKeys ? 'Why this issue' : (() => {
+                    const href = sample ? null : siteLink(siteUrl, issueUrls[affected.issueKey] ?? `/browse/${affected.issueKey}`);
+                    return href ? <Link href={href}>{affected.issueKey}</Link> : affected.issueKey;
+                  })()}
+                  {` · relevance ${affected.relevance.toFixed(2)}`}
+                </Text>
+                {affected.wordingStatus === 'outdated' && <Lozenge appearance="moved">Outdated wording found</Lozenge>}
+                {affected.wordingStatus === 'replacement-found' && <Lozenge appearance="success">Replacement wording found</Lozenge>}
+              </Inline>
               {affected.reasons.map((reason) => <Text key={reason}>• {reason}</Text>)}
               {(canNote || candidate.notes?.[affected.issueKey]) && (
                 <NoteAction candidate={candidate} issueKey={affected.issueKey} siteUrl={siteUrl} onApplyNote={onApplyNote} onDraftNote={onDraftNote} />

@@ -67,6 +67,8 @@ export interface AffectedIssue {
   issueKey: string;
   /** 0..1. How strongly the observable signals tie the issue to the decision. Not a probability. */
   relevance: number;
+  /** Observable wording in the current issue. Omitted when the scan has no clear change evidence. */
+  wordingStatus?: 'outdated' | 'replacement-found';
   /** One entry per signal that contributed. Never empty. */
   reasons: string[];
 }

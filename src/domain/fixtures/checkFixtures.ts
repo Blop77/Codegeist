@@ -267,18 +267,24 @@ check('a rescan reports the replacement only when the linked issue text mentions
   const scan = (description: string) => extractDecisions({
     sources: [mcDemoInput.sources[0]],
     issues: mcDemoInput.issues.map((issue) => issue.key === 'MC-9' ? { ...issue, description } : issue)
-  }).candidates[0].affectedIssues.find((issue) => issue.issueKey === 'MC-9')!.reasons;
+  }).candidates[0].affectedIssues.find((issue) => issue.issueKey === 'MC-9')!;
+
+  const stale = scan('Scheduling: email, website and social follow separate channel plans.');
+  assert.equal(stale.wordingStatus, 'outdated');
 
   const updated = scan('Scheduling: email, website and social follow one shared launch plan.');
-  assert.ok(updated.includes('The issue mentions the replacement “one shared launch plan” and no longer mentions “separate channel plans”'));
-  assert.ok(!updated.some((reason) => reason.includes('still mentions')));
+  assert.equal(updated.wordingStatus, 'replacement-found');
+  assert.ok(updated.reasons.includes('The issue mentions the replacement “one shared launch plan” and no longer mentions “separate channel plans”'));
+  assert.ok(!updated.reasons.some((reason) => reason.includes('still mentions')));
 
   const deleted = scan('Scheduling: pending.');
-  assert.ok(!deleted.some((reason) => reason.includes('mentions the replacement')));
+  assert.equal(deleted.wordingStatus, undefined);
+  assert.ok(!deleted.reasons.some((reason) => reason.includes('mentions the replacement')));
 
   const conflicting = scan('We discussed one shared launch plan. Scheduling still uses separate channel plans.');
-  assert.ok(conflicting.some((reason) => reason.includes('still mentions')));
-  assert.ok(!conflicting.some((reason) => reason.includes('mentions the replacement')));
+  assert.equal(conflicting.wordingStatus, 'outdated');
+  assert.ok(conflicting.reasons.some((reason) => reason.includes('still mentions')));
+  assert.ok(!conflicting.reasons.some((reason) => reason.includes('mentions the replacement')));
 });
 
 check('reference lines under a decisions heading are not decisions', () => {

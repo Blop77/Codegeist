@@ -54,6 +54,7 @@ function toFinding(candidate, origin) {
       link: link(origin, `/browse/${affected.issueKey}`),
       relevance: affected.relevance,
       reasons: affected.reasons,
+      wordingStatus: affected.wordingStatus ?? null,
       notePosted: Boolean(candidate.notes?.[affected.issueKey])
     }))
   };
