@@ -54,6 +54,11 @@ export function notePayload(candidate, siteUrl, issueKey, note) {
   };
 }
 
+/** Payload for the `draftDecisionNote` resolver. */
+export function draftPayload(candidate, issueKey) {
+  return { projectKey: candidate.source.projectKey, candidateId: candidate.id, issueKey };
+}
+
 /** Records a posted note on the matching candidate in a scan result. */
 export function withNote(result, candidateId, issueKey, note) {
   return result && {
@@ -75,10 +80,12 @@ export function defaultNote(candidate) {
  * Review, edit and confirm one note before it is posted as a Jira comment. Nothing is sent
  * until "Post comment" is selected.
  */
-function NoteAction({ candidate, issueKey, siteUrl, onApplyNote }) {
+function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onDraftNote }) {
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [drafting, setDrafting] = useState(false);
   const [message, setMessage] = useState(null);
+  const [draftInfo, setDraftInfo] = useState(null);
   const applied = candidate.notes?.[issueKey];
 
   if (applied) {
@@ -107,6 +114,21 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote }) {
   }
 
   const trimmed = draft.trim();
+  const draftWithAi = async () => {
+    setDrafting(true);
+    setMessage(null);
+    setDraftInfo(null);
+    const result = await onDraftNote(issueKey);
+    setDrafting(false);
+    if (result?.ok) {
+      setDraft(result.note);
+      setDraftInfo(result.suggestion
+        ? 'Drafted by AI. The suggested description change quotes the issue word for word. Check the note before posting.'
+        : 'Drafted by AI from the finding and the issue. Check the note before posting.');
+    } else {
+      setMessage(result?.error ?? 'The AI could not draft a note. You can still write it yourself.');
+    }
+  };
   const post = async () => {
     setBusy(true);
     setMessage(null);
@@ -129,16 +151,24 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote }) {
       <TextArea
         name={`note-${candidate.id}-${issueKey}`}
         value={draft}
+        minimumRows={6}
+        resize="vertical"
         onChange={(event) => setDraft(event.target.value)}
-        isDisabled={busy}
+        isDisabled={busy || drafting}
       />
+      {draftInfo && <Text><Em>{draftInfo}</Em></Text>}
       {trimmed.length > MAX_NOTE_LENGTH && <Text>The note is too long ({trimmed.length} of {MAX_NOTE_LENGTH} characters).</Text>}
       {message && <SectionMessage appearance="error">{message}</SectionMessage>}
       <Inline space="space.100">
-        <Button appearance="primary" isDisabled={busy || !trimmed || trimmed.length > MAX_NOTE_LENGTH} onClick={post}>
+        <Button appearance="primary" isDisabled={busy || drafting || !trimmed || trimmed.length > MAX_NOTE_LENGTH} onClick={post}>
           {busy ? 'Posting…' : `Post comment to ${issueKey}`}
         </Button>
-        <Button appearance="subtle" isDisabled={busy} onClick={() => { setDraft(null); setMessage(null); }}>
+        {onDraftNote && (
+          <Button appearance="default" isDisabled={busy || drafting} onClick={draftWithAi}>
+            {drafting ? 'Drafting…' : 'Draft with AI'}
+          </Button>
+        )}
+        <Button appearance="subtle" isDisabled={busy || drafting} onClick={() => { setDraft(null); setMessage(null); setDraftInfo(null); }}>
           Cancel
         </Button>
       </Inline>
@@ -150,10 +180,10 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote }) {
  * One extracted candidate with its evidence and the reasons behind every match.
  * `issueUrls` maps issue keys to links; `hideIssueKeys` skips the key on the issue panel.
  * `onApplyNote(issueKey, note)` posts a reviewed note; it is offered only once the finding
- * is marked relevant. `sample` marks a finding from the bundled sample project: it has no
+ * is marked relevant. `onDraftNote(issueKey)` asks the AI for a draft the person then edits. `sample` marks a finding from the bundled sample project: it has no
  * links on this site and cannot be reviewed.
  */
-export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false, onApplyNote, sample = false }) {
+export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false, onApplyNote, onDraftNote, sample = false }) {
   const kind = KIND_LABEL[candidate.kind] ?? KIND_LABEL.proposal;
   const { source } = candidate;
   const sourceHref = siteLink(siteUrl, source.url);
@@ -217,7 +247,7 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
               </Text>
               {affected.reasons.map((reason) => <Text key={reason}>• {reason}</Text>)}
               {(canNote || candidate.notes?.[affected.issueKey]) && (
-                <NoteAction candidate={candidate} issueKey={affected.issueKey} siteUrl={siteUrl} onApplyNote={onApplyNote} />
+                <NoteAction candidate={candidate} issueKey={affected.issueKey} siteUrl={siteUrl} onApplyNote={onApplyNote} onDraftNote={onDraftNote} />
               )}
             </Stack>
           ))}

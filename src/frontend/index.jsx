@@ -15,7 +15,7 @@ import ForgeReconciler, {
   useProductContext
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
-import { CandidateCard, KIND_GROUPS, notePayload, siteLink, withNote } from './candidate-card';
+import { CandidateCard, draftPayload, KIND_GROUPS, notePayload, siteLink, withNote } from './candidate-card';
 
 function App() {
   const context = useProductContext();
@@ -37,7 +37,12 @@ function App() {
     setAiResult(null);
     setReviewError(null);
     try {
-      setResult(await invoke('getProjectRadar', { projectKey: key }));
+      const response = await invoke('getProjectRadar', { projectKey: key });
+      setResult(response);
+      // Findings from an earlier AI pass, already checked again against this scan's sources.
+      if (response?.ok && response.aiCandidates?.length > 0) {
+        setAiResult({ ok: true, saved: true, savedAt: response.aiSavedAt, candidates: response.aiCandidates, rejected: 0 });
+      }
     } catch {
       setResult({ ok: false, error: 'The project scan failed. Refresh the page and try again.' });
     } finally {
@@ -111,6 +116,14 @@ function App() {
       return response;
     } catch {
       return { ok: false, error: `Could not add the note. Open ${issueKey} to check whether the comment was posted before trying again.` };
+    }
+  };
+
+  const draftNote = async (candidate, issueKey) => {
+    try {
+      return await invoke('draftDecisionNote', draftPayload(candidate, issueKey));
+    } catch {
+      return { ok: false, error: 'The AI could not draft a note. You can still write it yourself.' };
     }
   };
 
@@ -212,7 +225,7 @@ function App() {
             {result.sample ? ' sample' : ''} Confluence{result.pages?.length === 1 ? ' page' : ' pages'}{result.sample ? '.' : ` mentioning ${result.projectKey}.`}
           </Text>
           {result.graph?.used && result.graph.teams.length > 0 && (
-            <SectionMessage appearance="discovery" title="Context from Teamwork Graph">
+            <SectionMessage appearance="discovery" title={result.sample ? 'Context from Teamwork Graph (sample)' : 'Context from Teamwork Graph'}>
               Teams linked to {result.projectKey}: {result.graph.teams.join(', ')}.
               {result.graph.spaces.length > 0 ? ` Their Confluence spaces: ${result.graph.spaces.join(', ')}.` : ''}
               {` Added ${result.graph.pagesAdded} decision ${result.graph.pagesAdded === 1 ? 'page' : 'pages'} from those spaces and ${result.graph.linkedPagesAdded} linked ${result.graph.linkedPagesAdded === 1 ? 'page' : 'pages'} that do not mention ${result.projectKey}.`}
@@ -249,6 +262,7 @@ function App() {
                     onReview={result.sample ? undefined : (choice) => reviewCandidate(candidate, choice)}
                     reviewBusy={reviewBusyId === candidate.id}
                     onApplyNote={result.sample ? undefined : (issueKey, note) => applyNote(candidate, issueKey, note)}
+                    onDraftNote={result.sample ? undefined : (issueKey) => draftNote(candidate, issueKey)}
                   />
                 ))}
               </Stack>
@@ -268,7 +282,7 @@ function App() {
             </Inline>
             {aiLoading && <Inline space="space.100"><Spinner /><Text>Reading {result.sample ? 'the sample' : 'your'} pages and issues…</Text></Inline>}
             {aiResult && !aiResult.ok && <SectionMessage appearance="warning" title="AI pass not run">{aiResult.error}</SectionMessage>}
-            {aiResult?.ok && aiResult.candidates.length === 0 && (
+            {aiResult?.ok && !aiResult.saved && aiResult.candidates.length === 0 && (
               <SectionMessage appearance="information" title="Nothing more found">
                 The AI found no further decisions with a quote it could match to the source.
               </SectionMessage>
@@ -276,8 +290,9 @@ function App() {
             {aiResult?.ok && aiResult.candidates.length > 0 && (
               <Stack space="space.200">
                 <Text>
-                  {aiResult.candidates.length} more {aiResult.candidates.length === 1 ? 'finding' : 'findings'}, each with a
-                  quote checked against its source.{aiResult.rejected > 0 ? ` ${aiResult.rejected} AI suggestions were dropped because their quote did not match the source.` : ''}
+                  {aiResult.saved
+                    ? `${aiResult.candidates.length} ${aiResult.candidates.length === 1 ? 'finding' : 'findings'} from an earlier AI pass${aiResult.savedAt ? ` (${new Date(aiResult.savedAt).toLocaleDateString()})` : ''}, checked again word for word against the current sources. Teammates and the issue panel see them too.`
+                    : `${aiResult.candidates.length} AI ${aiResult.candidates.length === 1 ? 'finding' : 'findings'}${typeof aiResult.newCount === 'number' ? ` (${aiResult.newCount} new)` : ''}, each with a quote checked against its source.${aiResult.rejected > 0 ? ` ${aiResult.rejected} AI suggestions were dropped because their quote did not match the source.` : ''}`}
                 </Text>
                 {aiResult.candidates.map((candidate) => (
                   <CandidateCard
@@ -289,6 +304,7 @@ function App() {
                     onReview={result.sample ? undefined : (choice) => reviewCandidate(candidate, choice)}
                     reviewBusy={reviewBusyId === candidate.id}
                     onApplyNote={result.sample ? undefined : (issueKey, note) => applyNote(candidate, issueKey, note)}
+                    onDraftNote={result.sample ? undefined : (issueKey) => draftNote(candidate, issueKey)}
                   />
                 ))}
               </Stack>

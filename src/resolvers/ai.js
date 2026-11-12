@@ -83,11 +83,54 @@ async function claimRun(scopeKey) {
   return null;
 }
 
+const SAVED_LIMIT = 30;
+const savedKey = (projectKey) => `ai-proposals:${projectKey}`;
+
+/** The proposal behind each verified candidate, in the compact form that is saved. */
+function toSaved(candidates, proposals) {
+  return candidates.map((c) => {
+    const proposal = proposals.find((p) => String(p?.sourceId) === c.source.id && String(p?.quote ?? '').trim() === c.evidence.quote);
+    const reason = typeof proposal?.reason === 'string' ? proposal.reason.slice(0, 200) : '';
+    return { sourceId: c.source.id, quote: c.evidence.quote, kind: c.kind, ...(reason ? { reason } : {}) };
+  });
+}
+
+/** Adds newly verified proposals to the project's saved AI findings, newest first. */
+async function saveProposals(projectKey, saved) {
+  if (saved.length === 0) return;
+  const stored = (await storage.get(savedKey(projectKey)))?.proposals ?? [];
+  const seen = new Set();
+  const merged = [...saved, ...stored].filter((p) => {
+    const id = `${p.sourceId}\u0000${p.quote}`;
+    if (seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  }).slice(0, SAVED_LIMIT);
+  await storage.set(savedKey(projectKey), { savedAt: new Date().toISOString(), proposals: merged });
+}
+
 /**
- * Runs the AI pass over `sources`. `known` are the rule-based candidates, so the model is asked
- * only for what they missed and its proposals cannot duplicate them.
+ * Earlier AI findings for a project, checked again against the sources of this scan: a finding
+ * whose quote is no longer in its source (or that the rules now find) is dropped. Costs no model call.
  */
-export async function findWithAi({ scopeKey, sources, issues, known }) {
+export async function savedAiCandidates({ projectKey, sources, issues, known }) {
+  try {
+    const stored = await storage.get(savedKey(projectKey));
+    if (!stored?.proposals?.length) return { candidates: [], savedAt: null };
+    const { candidates } = verifyProposedFindings({ sources, issues }, stored.proposals, known);
+    return { candidates: candidates.map((c) => ({ ...c, ai: true })), savedAt: stored.savedAt ?? null };
+  } catch (error) {
+    console.warn('Decision Drift Radar saved AI findings could not be read', error);
+    return { candidates: [], savedAt: null };
+  }
+}
+
+/**
+ * Runs the AI pass over `sources`. `known` are the candidates already found (by the rules, and
+ * earlier AI passes), so the model is asked only for what they missed and its proposals cannot
+ * duplicate them. With `saveFor`, verified findings are saved for that project's later scans.
+ */
+export async function findWithAi({ scopeKey, sources, issues, known, saveFor = null }) {
   const limited = await claimRun(scopeKey);
   if (limited) return { ok: false, error: limited };
 
@@ -112,6 +155,13 @@ export async function findWithAi({ scopeKey, sources, issues, known }) {
   const proposals = parseProposals(response?.choices?.[0]?.message?.content);
   // Verify against the full source text, not the truncated copy sent to the model.
   const { candidates, rejected } = verifyProposedFindings({ sources, issues }, proposals, known);
+  if (saveFor) {
+    try {
+      await saveProposals(saveFor, toSaved(candidates, proposals));
+    } catch (error) {
+      console.warn('Decision Drift Radar AI findings could not be saved', error);
+    }
+  }
   return {
     ok: true,
     candidates,
@@ -120,4 +170,75 @@ export async function findWithAi({ scopeKey, sources, issues, known }) {
     model: AI_MODEL,
     usage: response?.usage ?? null
   };
+}
+
+const DRAFT_PROMPT = `You help a teammate write a short Jira comment about a decision that may not have reached this issue.
+
+You receive the decision (with its exact quote and source), why the app thinks the issue may be affected, and the issue's title and description.
+
+Write:
+- "note": 2 to 3 plain sentences for the issue's comment: what was decided and where, what in this issue looks out of date, and what to check or update. Use only facts from the input. Do not invent names, dates or numbers. Do not repeat the quote word for word; the app adds it below the note.
+- "outdated": the shortest phrase, copied exactly from the issue description, that still describes the old plan. Use "" if no phrase in the description conflicts with the decision.
+- "replacement": what that phrase should say instead, based only on the decision. Use "" when "outdated" is "".
+
+Reply with JSON only, no other text:
+{"note":"…","outdated":"…","replacement":"…"}`;
+
+const MAX_DRAFT_TOKENS = 400;
+
+/**
+ * Drafts the note for one finding and issue. The person edits it before posting. A suggested
+ * description change is offered only when its "outdated" phrase is found word for word in the issue.
+ */
+export async function draftNoteWithAi({ candidate, issue }) {
+  const limited = await claimRun(`draft:${issue.key}:${candidate.id}`);
+  if (limited) return { ok: false, error: limited.replace('The rule-based findings above are unaffected.', 'You can still write the note yourself.') };
+
+  const affected = candidate.affectedIssues.find((a) => a.issueKey === issue.key);
+  const input = [
+    `Decision kind: ${candidate.kind}`,
+    `Decision: ${candidate.summary}`,
+    `Exact quote: "${candidate.evidence.quote}"`,
+    `Source: ${candidate.source.title}${candidate.source.updatedAt ? ` (updated ${candidate.source.updatedAt.slice(0, 10)})` : ''}`,
+    `Why the issue may be affected: ${(affected?.reasons ?? []).join('; ') || 'not stated'}`,
+    `Issue: ${issue.key}: ${issue.title}`,
+    `Issue description:\n${String(issue.description ?? '').slice(0, 4000) || '(empty)'}`
+  ].join('\n');
+
+  let response;
+  try {
+    response = await chat({
+      model: AI_MODEL,
+      max_completion_tokens: MAX_DRAFT_TOKENS,
+      messages: [
+        { role: 'system', content: DRAFT_PROMPT },
+        { role: 'user', content: input }
+      ]
+    });
+  } catch (error) {
+    console.error('Decision Drift Radar note draft failed', error?.context?.responseText ?? error);
+    return { ok: false, error: 'The AI could not draft a note right now. You can still write it yourself.' };
+  }
+
+  const draft = parseJsonObject(response?.choices?.[0]?.message?.content);
+  const note = typeof draft?.note === 'string' ? draft.note.replace(/[ \t]+/g, ' ').trim().slice(0, 1200) : '';
+  if (!note) return { ok: false, error: 'The AI returned no usable draft. You can still write the note yourself.' };
+  const outdated = typeof draft.outdated === 'string' ? draft.outdated.trim() : '';
+  const replacement = typeof draft.replacement === 'string' ? draft.replacement.trim() : '';
+  const verified = outdated.length >= 3 && outdated.length <= 200 && replacement && replacement.length <= 200
+    && String(issue.description ?? '').includes(outdated);
+  return { ok: true, note, suggestion: verified ? { outdated, replacement } : null, model: AI_MODEL };
+}
+
+/** A JSON object in a model reply, tolerating a code fence or stray text around it. */
+function parseJsonObject(content) {
+  const text = Array.isArray(content) ? content.map((part) => part?.text ?? '').join('') : String(content ?? '');
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start === -1 || end <= start) return null;
+  try {
+    return JSON.parse(text.slice(start, end + 1));
+  } catch {
+    return null;
+  }
 }

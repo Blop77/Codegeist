@@ -8,7 +8,7 @@ import ForgeReconciler, {
   useProductContext
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
-import { CandidateCard, notePayload, withNote } from './candidate-card';
+import { CandidateCard, draftPayload, notePayload, withNote } from './candidate-card';
 
 function IssuePanel() {
   const context = useProductContext();
@@ -95,6 +95,13 @@ function IssuePanel() {
           onReview={(choice) => reviewCandidate(candidate, choice)}
           reviewBusy={reviewBusyId === candidate.id}
           onApplyNote={(noteIssueKey, note) => applyNote(candidate, noteIssueKey, note)}
+          onDraftNote={async (noteIssueKey) => {
+            try {
+              return await invoke('draftDecisionNote', draftPayload(candidate, noteIssueKey));
+            } catch {
+              return { ok: false, error: 'The AI could not draft a note. You can still write it yourself.' };
+            }
+          }}
         />
       )) : result ? (
         <SectionMessage appearance="information" title="No linked decisions found">

@@ -158,14 +158,15 @@ function authorName(user) {
 export const NOTE_MARKER = 'Decision Drift Radar note';
 
 /** ADF body for a reviewed note: the note, the quoted evidence, and a link to the source. */
-export function noteCommentBody({ note, quote, sourceTitle, sourceUrl }) {
+export function noteCommentBody({ note, quote, sourceTitle, sourceUrl, confirmedIn }) {
   const text = (value, marks) => ({ type: 'text', text: value, ...(marks ? { marks } : {}) });
   const title = sourceTitle || 'Source';
+  const byline = confirmedIn === 'rovo' ? ' · drafted with the Rovo agent and confirmed by a teammate before posting' : ' · reviewed by a teammate before posting';
   return {
     type: 'doc',
     version: 1,
     content: [
-      { type: 'paragraph', content: [text(NOTE_MARKER, [{ type: 'strong' }]), text(' · reviewed by a teammate before posting')] },
+      { type: 'paragraph', content: [text(NOTE_MARKER, [{ type: 'strong' }]), text(byline)] },
       ...note.split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line) => ({ type: 'paragraph', content: [text(line)] })),
       { type: 'blockquote', content: [{ type: 'paragraph', content: [text(quote)] }] },
       {

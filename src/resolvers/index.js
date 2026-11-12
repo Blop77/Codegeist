@@ -1,89 +1,16 @@
 import Resolver from '@forge/resolver';
-import api, { route, startsWith, storage } from '@forge/api';
-import { noteCommentBody, toIssueSummary } from './normalize';
+import api, { route, storage } from '@forge/api';
+import { toIssueSummary } from './normalize';
 import { analyze, safeError, scanIssue, scanProject, validProjectKey } from './scan';
-import { SAMPLE_PROJECT_KEY, sampleIssues, sampleSources } from './sample-data';
-import { findWithAi } from './ai';
+import { SAMPLE_GRAPH, SAMPLE_PROJECT_KEY, sampleIssues, sampleSources } from './sample-data';
+import { draftNoteWithAi, findWithAi } from './ai';
+import {
+  attachReviewState, canAccessProject, MAX_NOTE_LENGTH, noteProblem, postNote, reviewKey, validReviewTarget
+} from './notes';
 
 const resolver = new Resolver();
 
 const REVIEW_CHOICES = new Set(['relevant', 'dismissed']);
-// Forge storage returns at most 20 entries per query page.
-const REVIEW_PAGE_SIZE = 20;
-const MAX_REVIEW_PAGES = 50;
-
-function reviewPrefix(projectKey) {
-  return `review:${projectKey}:`;
-}
-
-function reviewKey(projectKey, candidateId) {
-  return `${reviewPrefix(projectKey)}${candidateId}`;
-}
-
-function notePrefix(projectKey) {
-  return `note:${projectKey}:`;
-}
-
-/** One record per finding and issue, so the same note is never posted twice. */
-function noteKey(projectKey, candidateId, issueKey) {
-  return `${notePrefix(projectKey)}${candidateId}:${issueKey}`;
-}
-
-/** Every stored value under a key prefix, read with one paginated query. */
-async function loadByPrefix(prefix) {
-  const entries = new Map();
-  let cursor;
-  for (let page = 0; page < MAX_REVIEW_PAGES; page++) {
-    let query = storage.query().where('key', startsWith(prefix)).limit(REVIEW_PAGE_SIZE);
-    if (cursor) query = query.cursor(cursor);
-    const { results, nextCursor } = await query.getMany();
-    for (const { key, value } of results ?? []) entries.set(key.slice(prefix.length), value);
-    if (!nextCursor) return { entries, complete: true };
-    cursor = nextCursor;
-  }
-  return { entries, complete: false };
-}
-
-/** Adds each finding's saved review and the notes already posted to Jira for it. */
-async function attachReviewState(projectKey, candidates) {
-  if (candidates.length === 0) return { candidates, reviewWarning: null };
-  try {
-    const [reviews, notes] = await Promise.all([loadByPrefix(reviewPrefix(projectKey)), loadByPrefix(notePrefix(projectKey))]);
-    const complete = reviews.complete && notes.complete;
-    if (!complete) console.warn(`Decision Drift Radar read only the first ${MAX_REVIEW_PAGES * REVIEW_PAGE_SIZE} review records for ${projectKey}`);
-    const notesByCandidate = new Map();
-    for (const [key, note] of notes.entries) {
-      const split = key.indexOf(':');
-      const candidateId = key.slice(0, split);
-      if (!notesByCandidate.has(candidateId)) notesByCandidate.set(candidateId, {});
-      notesByCandidate.get(candidateId)[key.slice(split + 1)] = note;
-    }
-    return {
-      candidates: candidates.map((candidate) => ({
-        ...candidate,
-        review: reviews.entries.get(candidate.id) ?? null,
-        notes: notesByCandidate.get(candidate.id) ?? {}
-      })),
-      reviewWarning: complete ? null : 'Some older reviews could not be loaded for this project.'
-    };
-  } catch (error) {
-    console.warn('Decision Drift Radar review state could not be read', error);
-    return {
-      candidates: candidates.map((candidate) => ({ ...candidate, review: null, notes: {} })),
-      reviewWarning: 'Review history is unavailable. Review actions may require the app storage permission to be granted again.'
-    };
-  }
-}
-
-/** Review state is per project, so only people who can see the project may change it. */
-async function canAccessProject(projectKey) {
-  const response = await api.asUser().requestJira(route`/rest/api/3/project/${projectKey}`);
-  return response.ok;
-}
-
-function validReviewTarget(projectKey, candidateId) {
-  return /^[A-Z][A-Z0-9_]{1,9}$/.test(projectKey) && /^dc_[a-f0-9]{16}$/.test(candidateId);
-}
 
 const NO_PROJECT_ACCESS = 'You do not have access to this Jira project, so you cannot review its findings.';
 
@@ -99,7 +26,9 @@ resolver.define('getProjectRadar', async ({ payload, context }) => {
     const scanned = await scanProject(projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
     const { rawIssues, pages, warnings, candidates: extractedCandidates, notice, graph } = scanned;
-    const { candidates, reviewWarning } = await attachReviewState(projectKey, extractedCandidates);
+    const { candidates: reviewed, reviewWarning } = await attachReviewState(projectKey, [...extractedCandidates, ...scanned.aiCandidates]);
+    const candidates = reviewed.slice(0, extractedCandidates.length);
+    const aiCandidates = reviewed.slice(extractedCandidates.length);
 
     return {
       ok: true,
@@ -110,7 +39,9 @@ resolver.define('getProjectRadar', async ({ payload, context }) => {
       notice,
       reviewWarning,
       warnings,
-      graph
+      graph,
+      aiCandidates,
+      aiSavedAt: aiCandidates.length > 0 ? scanned.aiSavedAt : null
     };
   } catch (error) {
     console.error('Decision Drift Radar project scan failed', error);
@@ -128,7 +59,7 @@ resolver.define('getIssueDecisionContext', async ({ payload, context }) => {
     const scanned = await scanIssue(issueKey, projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
     const { warnings, candidates: forIssue, notice } = scanned;
-    const { candidates, reviewWarning } = await attachReviewState(projectKey, forIssue);
+    const { candidates, reviewWarning } = await attachReviewState(projectKey, [...forIssue, ...scanned.aiCandidates]);
 
     return { ok: true, issueKey, candidates, notice, reviewWarning, warnings };
   } catch (error) {
@@ -181,86 +112,62 @@ resolver.define('clearDecisionReview', async ({ payload, context }) => {
   }
 });
 
-const MAX_NOTE_LENGTH = 2000;
-const MAX_QUOTE_LENGTH = 320;
-const MAX_TITLE_LENGTH = 255;
-
-/** A link on this site to a Confluence page or Jira issue; anything else is dropped. */
-function trustedSourceUrl(value, siteUrl) {
-  try {
-    const url = new URL(String(value ?? ''));
-    if (url.protocol !== 'https:') return null;
-    if (!/^\/(?:wiki|browse)\//.test(url.pathname)) return null;
-    if (siteUrl ? url.origin !== new URL(siteUrl).origin : !url.hostname.endsWith('.atlassian.net')) return null;
-    return url.href;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * The app's only Jira write: posts one reviewed note as a comment, as the signed-in user.
  * Requires a finding already marked relevant, and records the comment so it is not posted twice.
  */
 resolver.define('applyDecisionNote', async ({ payload, context }) => {
-  const projectKey = String(payload?.projectKey ?? '').trim().toUpperCase();
-  const candidateId = String(payload?.candidateId ?? '').trim();
-  const issueKey = String(payload?.issueKey ?? '').trim().toUpperCase();
-  const note = String(payload?.note ?? '').trim();
-  const quote = String(payload?.quote ?? '').trim();
-  const sourceTitle = String(payload?.sourceTitle ?? '').trim().slice(0, MAX_TITLE_LENGTH);
-
-  if (!validReviewTarget(projectKey, candidateId) || !new RegExp(`^${projectKey}-\\d+$`).test(issueKey)) {
-    return { ok: false, error: 'This note is invalid. Refresh the project scan and try again.' };
-  }
-  if (!note || note.length > MAX_NOTE_LENGTH) {
-    return { ok: false, error: `Write a note of up to ${MAX_NOTE_LENGTH} characters.` };
-  }
-  if (!quote || quote.length > MAX_QUOTE_LENGTH) {
-    return { ok: false, error: 'This note is missing its source quote. Refresh the project scan and try again.' };
-  }
+  const request = {
+    projectKey: String(payload?.projectKey ?? '').trim().toUpperCase(),
+    candidateId: String(payload?.candidateId ?? '').trim(),
+    issueKey: String(payload?.issueKey ?? '').trim().toUpperCase(),
+    note: String(payload?.note ?? '').trim(),
+    quote: String(payload?.quote ?? '').trim()
+  };
+  const problem = noteProblem(request);
+  if (problem) return { ok: false, error: problem };
   if (!context?.accountId) {
     return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
   }
 
   try {
-    const review = await storage.get(reviewKey(projectKey, candidateId));
+    const review = await storage.get(reviewKey(request.projectKey, request.candidateId));
     if (review?.status !== 'relevant') {
       return { ok: false, error: 'Mark this finding relevant before adding a note to Jira.' };
     }
-    const key = noteKey(projectKey, candidateId, issueKey);
-    const existing = await storage.get(key);
-    if (existing) return { ok: true, note: existing, alreadyApplied: true };
-
-    const body = noteCommentBody({ note, quote, sourceTitle, sourceUrl: trustedSourceUrl(payload?.sourceUrl, context?.siteUrl) });
-    const response = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}/comment`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ body })
-    });
-    if (!response.ok) {
-      if (response.status === 404) return { ok: false, error: `${issueKey} was not found, or you cannot see it. Nothing was posted.` };
-      if (response.status === 401 || response.status === 403) {
-        return { ok: false, error: `You do not have permission to comment on ${issueKey}, or the app is missing its Jira write permission. Nothing was posted.` };
-      }
-      return { ok: false, error: `Jira could not add the comment (HTTP ${response.status}). Nothing was posted.` };
-    }
-    const comment = await response.json();
-    const record = { issueKey, commentId: String(comment.id ?? ''), appliedAt: new Date().toISOString() };
-    try {
-      await storage.set(key, record);
-    } catch (error) {
-      console.error('Decision Drift Radar note posted but its record was not saved', error);
-      return {
-        ok: true,
-        note: record,
-        warning: `The comment was added to ${issueKey}, but the app could not record it. Do not add it again.`
-      };
-    }
-    return { ok: true, note: record };
+    return await postNote({ ...request, sourceTitle: payload?.sourceTitle, sourceUrl: payload?.sourceUrl, siteUrl: context?.siteUrl });
   } catch (error) {
     console.error('Decision Drift Radar note failed', error);
     return { ok: false, error: 'Could not add the note. Check the issue before trying again, in case the comment was posted.' };
+  }
+});
+
+/**
+ * Drafts the note for a finding and one of its issues with the AI. Changes nothing: the person
+ * edits the draft and posts it with applyDecisionNote. Counts towards the site's daily AI limit.
+ */
+resolver.define('draftDecisionNote', async ({ payload, context }) => {
+  const projectKey = String(payload?.projectKey ?? '').trim().toUpperCase();
+  const candidateId = String(payload?.candidateId ?? '').trim();
+  const issueKey = String(payload?.issueKey ?? '').trim().toUpperCase();
+  if (!validReviewTarget(projectKey, candidateId) || !new RegExp(`^${projectKey}-\\d+$`).test(issueKey)) {
+    return { ok: false, error: 'This draft request is invalid. Refresh the project scan and try again.' };
+  }
+  if (!context?.accountId) return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
+  try {
+    const scanned = await scanIssue(issueKey, projectKey, { cloudId: context?.cloudId });
+    if (!scanned.ok) return { ok: false, error: scanned.error };
+    const candidate = [...scanned.candidates, ...scanned.aiCandidates].find((c) => c.id === candidateId);
+    if (!candidate) return { ok: false, error: `This finding no longer points at ${issueKey}. Scan again.` };
+    const drafted = await draftNoteWithAi({ candidate, issue: scanned.issueRecords[0] });
+    if (!drafted.ok) return drafted;
+    const suggestion = drafted.suggestion
+      ? `\nSuggested change to the description: replace "${drafted.suggestion.outdated}" with "${drafted.suggestion.replacement}".`
+      : '';
+    return { ok: true, note: `${drafted.note}${suggestion}`.slice(0, MAX_NOTE_LENGTH), suggestion: drafted.suggestion };
+  } catch (error) {
+    console.error('Decision Drift Radar note draft failed', error);
+    return { ok: false, error: 'The AI could not draft a note right now. You can still write it yourself.' };
   }
 });
 
@@ -282,15 +189,16 @@ resolver.define('getSampleRadar', async () => {
       url: null,
       updated: issue.updatedAt
     })),
-    pages: sampleSources.filter((source) => source.type === 'confluence_page').map(({ id, title }) => ({ id, title, url: '' })),
+    pages: sampleSources.filter((source) => source.type === 'confluence_page').map(({ id, title, via }) => ({ id, title, url: '', ...(via ? { via } : {}) })),
     candidates: candidates.map((candidate) => ({ ...candidate, source: { ...candidate.source, url: '' }, review: null, notes: {} })),
     notice,
     reviewWarning: null,
-    warnings: []
+    warnings: [],
+    graph: SAMPLE_GRAPH,
+    aiCandidates: []
   };
 });
 
-/** Projects the signed-in user can see, for the project picker. */
 /**
  * Optional AI pass for a real project: rescans as the user, then asks the model only for what the
  * rules missed. Findings come back with review state, like a normal scan.
@@ -306,11 +214,14 @@ resolver.define('getAiFindings', async ({ payload, context }) => {
       scopeKey: projectKey,
       sources: scanned.sources,
       issues: scanned.issueRecords,
-      known: scanned.candidates
+      known: [...scanned.candidates, ...scanned.aiCandidates],
+      saveFor: projectKey
     });
     if (!result.ok) return result;
-    const { candidates } = await attachReviewState(projectKey, result.candidates);
-    return { ...result, candidates: candidates.map((c) => ({ ...c, ai: true })) };
+    // Earlier AI findings first, then the new ones, all with their reviews.
+    const all = [...scanned.aiCandidates, ...result.candidates.map((c) => ({ ...c, ai: true }))];
+    const { candidates } = await attachReviewState(projectKey, all);
+    return { ...result, candidates, newCount: result.candidates.length };
   } catch (error) {
     console.error('Decision Drift Radar AI findings failed', error);
     return { ok: false, error: 'The AI pass could not complete. The rule-based findings above are unaffected.' };
@@ -334,6 +245,7 @@ resolver.define('getSampleAiFindings', async ({ context }) => {
   }
 });
 
+/** Projects the signed-in user can see, for the project picker. */
 resolver.define('listProjects', async () => {
   try {
     const response = await api.asUser().requestJira(route`/rest/api/3/project/search?maxResults=50&orderBy=name`);
