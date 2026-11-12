@@ -29,12 +29,14 @@ function App() {
   const [reviewBusyId, setReviewBusyId] = useState(null);
   const [reviewError, setReviewError] = useState(null);
   const [aiResult, setAiResult] = useState(null);
+  const [aiError, setAiError] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
 
   const scan = async (key = projectKey) => {
     setLoading(true);
     setResult(null);
     setAiResult(null);
+    setAiError(null);
     setReviewError(null);
     try {
       const response = await invoke('getProjectRadar', { projectKey: key });
@@ -55,6 +57,7 @@ function App() {
     setLoading(true);
     setResult(null);
     setAiResult(null);
+    setAiError(null);
     setReviewError(null);
     try {
       setResult(await invoke('getSampleRadar'));
@@ -69,20 +72,22 @@ function App() {
   const findWithAi = async () => {
     if (!result?.ok) return;
     setAiLoading(true);
-    setAiResult(null);
+    setAiError(null);
     try {
-      setAiResult(result.sample
+      const response = result.sample
         ? await invoke('getSampleAiFindings')
-        : await invoke('getAiFindings', { projectKey: result.projectKey }));
+        : await invoke('getAiFindings', { projectKey: result.projectKey });
+      if (response?.ok) setAiResult(response);
+      else setAiError(response?.error ?? 'The AI pass could not complete.');
     } catch {
-      setAiResult({ ok: false, error: 'The AI pass could not complete. The findings above are unaffected.' });
+      setAiError('The AI pass could not complete. The current findings are unaffected.');
     } finally {
       setAiLoading(false);
     }
   };
 
   const sampleButton = (
-    <Button appearance="default" onClick={scanSample} isDisabled={loading}>
+    <Button appearance="default" onClick={scanSample} isDisabled={loading || aiLoading}>
       Try with sample data
     </Button>
   );
@@ -108,7 +113,7 @@ function App() {
 
   const applyNote = async (candidate, issueKey, note) => {
     try {
-      const response = await invoke('applyDecisionNote', notePayload(candidate, siteUrl, issueKey, note));
+      const response = await invoke('applyDecisionNote', notePayload(candidate, issueKey, note));
       if (response?.ok) {
         setResult((current) => withNote(current, candidate.id, issueKey, response.note));
         setAiResult((current) => current?.ok ? withNote(current, candidate.id, issueKey, response.note) : current);
@@ -142,9 +147,14 @@ function App() {
     setReviewBusyId(candidate.id);
     setReviewError(null);
     try {
+      const target = {
+        projectKey: candidate.source.projectKey,
+        candidateId: candidate.id,
+        issueKey: candidate.affectedIssues[0]?.issueKey
+      };
       const response = choice === 'reset'
-        ? await invoke('clearDecisionReview', { projectKey: candidate.source.projectKey, candidateId: candidate.id })
-        : await invoke('reviewDecision', { projectKey: candidate.source.projectKey, candidateId: candidate.id, choice });
+        ? await invoke('clearDecisionReview', target)
+        : await invoke('reviewDecision', { ...target, choice });
       if (!response?.ok) {
         setReviewError(response?.error ?? 'Could not save the review. Try again.');
         return;
@@ -169,7 +179,7 @@ function App() {
       {contextProjectKey ? (
         <Inline space="space.150" alignBlock="center">
           <Text>Project {contextProjectKey}</Text>
-          <Button appearance="default" onClick={() => scan(contextProjectKey)} isDisabled={loading}>
+          <Button appearance="default" onClick={() => scan(contextProjectKey)} isDisabled={loading || aiLoading}>
             {loading ? 'Scanning…' : 'Scan again'}
           </Button>
           {sampleButton}
@@ -200,7 +210,7 @@ function App() {
               />
             </Stack>
           )}
-          <Button appearance="primary" onClick={() => scan()} isDisabled={loading || !projectKey.trim()}>
+          <Button appearance="primary" onClick={() => scan()} isDisabled={loading || aiLoading || !projectKey.trim()}>
             {loading ? 'Scanning…' : 'Scan project'}
           </Button>
           {sampleButton}
@@ -222,7 +232,7 @@ function App() {
           )}
           <Text>
             Scanned {result.issues.length} {result.sample ? 'sample' : `recent ${result.projectKey}`} issues and {result.pages?.length ?? 0}
-            {result.sample ? ' sample' : ''} Confluence{result.pages?.length === 1 ? ' page' : ' pages'}{result.sample ? '.' : ` mentioning ${result.projectKey}.`}
+            {result.sample ? ' sample' : ''} Confluence{result.pages?.length === 1 ? ' page' : ' pages'}.
           </Text>
           {result.graph?.used && result.graph.teams.length > 0 && (
             <SectionMessage appearance="discovery" title={result.sample ? 'Context from Teamwork Graph (sample)' : 'Context from Teamwork Graph'}>
@@ -240,8 +250,8 @@ function App() {
           )}
           {result.notice && <SectionMessage appearance="information">{result.notice}</SectionMessage>}
           {result.reviewWarning && <SectionMessage appearance="warning" title="Review history unavailable">{result.reviewWarning}</SectionMessage>}
-          {(result.candidates ?? []).length === 0 ? (
-            <SectionMessage appearance="information" title="No decisions detected">
+          {(result.candidates ?? []).length === 0 && !(aiResult?.candidates?.length > 0) ? (
+            <SectionMessage appearance="information" title="No findings detected">
               The scan reads issue descriptions, comments and Confluence pages mentioning {result.projectKey}, looking for
               wording such as “Decision:”, “we agreed”, “we decided to”, “open question” or “we should”. To see what
               findings look like, select Try with sample data.
@@ -281,7 +291,7 @@ function App() {
               </Button>
             </Inline>
             {aiLoading && <Inline space="space.100"><Spinner /><Text>Reading {result.sample ? 'the sample' : 'your'} pages and issues…</Text></Inline>}
-            {aiResult && !aiResult.ok && <SectionMessage appearance="warning" title="AI pass not run">{aiResult.error}</SectionMessage>}
+            {aiError && <SectionMessage appearance="warning" title="AI pass not run">{aiError}</SectionMessage>}
             {aiResult?.ok && !aiResult.saved && aiResult.candidates.length === 0 && (
               <SectionMessage appearance="information" title="Nothing more found">
                 The AI found no further decisions with a quote it could match to the source.
@@ -311,7 +321,7 @@ function App() {
             )}
           </Stack>
           {result.warnings?.length > 0 ? (
-            <SectionMessage appearance="warning" title="Confluence source search unavailable">
+            <SectionMessage appearance="warning" title="Confluence project-key search unavailable">
               {result.warnings.join(' ')} Jira descriptions and comments were still scanned.
             </SectionMessage>
           ) : result.pages?.length > 0 ? (

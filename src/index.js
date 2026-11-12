@@ -3,6 +3,5 @@ export {
   findIssueDecisions,
   findMoreDecisionsWithAi,
   findProjectDecisions,
-  postDecisionNote,
   prepareDecisionNote
 } from './rovo/actions';

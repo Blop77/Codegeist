@@ -26,11 +26,10 @@ Rules:
 - Only include text that states a decision, an unresolved question, or a suggestion. Skip status updates, plans of individual people, attendee lists, disclaimers, and anything negated ("not approved", "not a decision").
 - In Jira issue descriptions, skip sentences that only describe how the work is currently planned, scheduled or scoped ("the email campaign keeps separate channel plans"). That is the work item, not a decision about it. Report a sentence from a description only if it records that something was decided, agreed or approved.
 - "kind" is "decision", "open_question" or "proposal".
-- "reason" is at most 15 words on why it is a decision, question or proposal.
 - If there is nothing new, return an empty list.
 
 Reply with JSON only, no other text:
-{"findings":[{"sourceId":"…","quote":"…","kind":"decision","reason":"…"}]}`;
+{"findings":[{"sourceId":"…","quote":"…","kind":"decision"}]}`;
 
 function pickSources(sources) {
   const ordered = [...sources].sort((a, b) => (a.type === 'confluence_page' ? 0 : 1) - (b.type === 'confluence_page' ? 0 : 1));
@@ -86,13 +85,9 @@ async function claimRun(scopeKey) {
 const SAVED_LIMIT = 30;
 const savedKey = (projectKey) => `ai-proposals:${projectKey}`;
 
-/** The proposal behind each verified candidate, in the compact form that is saved. */
-function toSaved(candidates, proposals) {
-  return candidates.map((c) => {
-    const proposal = proposals.find((p) => String(p?.sourceId) === c.source.id && String(p?.quote ?? '').trim() === c.evidence.quote);
-    const reason = typeof proposal?.reason === 'string' ? proposal.reason.slice(0, 200) : '';
-    return { sourceId: c.source.id, quote: c.evidence.quote, kind: c.kind, ...(reason ? { reason } : {}) };
-  });
+// Model-written explanations can contain details from another source in the prompt.
+function evidenceOnly({ sourceId, quote, kind }) {
+  return { sourceId, quote, kind };
 }
 
 /** Adds newly verified proposals to the project's saved AI findings, newest first. */
@@ -105,7 +100,7 @@ async function saveProposals(projectKey, saved) {
     if (seen.has(id)) return false;
     seen.add(id);
     return true;
-  }).slice(0, SAVED_LIMIT);
+  }).slice(0, SAVED_LIMIT).map(evidenceOnly);
   await storage.set(savedKey(projectKey), { savedAt: new Date().toISOString(), proposals: merged });
 }
 
@@ -117,7 +112,7 @@ export async function savedAiCandidates({ projectKey, sources, issues, known }) 
   try {
     const stored = await storage.get(savedKey(projectKey));
     if (!stored?.proposals?.length) return { candidates: [], savedAt: null };
-    const { candidates } = verifyProposedFindings({ sources, issues }, stored.proposals, known);
+    const { candidates } = verifyProposedFindings({ sources, issues }, stored.proposals.map(evidenceOnly), known);
     return { candidates: candidates.map((c) => ({ ...c, ai: true })), savedAt: stored.savedAt ?? null };
   } catch (error) {
     console.warn('Decision Drift Radar saved AI findings could not be read', error);
@@ -147,17 +142,21 @@ export async function findWithAi({ scopeKey, sources, issues, known, saveFor = n
         { role: 'user', content: userPrompt(picked, known) }
       ]
     });
-  } catch (error) {
-    console.error('Decision Drift Radar AI pass failed', error?.context?.responseText ?? error);
+  } catch {
+    console.error('Decision Drift Radar AI pass failed');
     return { ok: false, error: 'The AI pass is unavailable right now. The rule-based findings above are unaffected.' };
   }
 
-  const proposals = parseProposals(response?.choices?.[0]?.message?.content);
+  const proposals = parseProposals(response?.choices?.[0]?.message?.content).filter((proposal) => proposal && typeof proposal === 'object').map(evidenceOnly);
   // Verify against the full source text, not the truncated copy sent to the model.
   const { candidates, rejected } = verifyProposedFindings({ sources, issues }, proposals, known);
   if (saveFor) {
     try {
-      await saveProposals(saveFor, toSaved(candidates, proposals));
+      await saveProposals(saveFor, candidates.map((candidate) => ({
+        sourceId: candidate.source.id,
+        quote: candidate.evidence.quote,
+        kind: candidate.kind
+      })));
     } catch (error) {
       console.warn('Decision Drift Radar AI findings could not be saved', error);
     }
@@ -215,8 +214,8 @@ export async function draftNoteWithAi({ candidate, issue }) {
         { role: 'user', content: input }
       ]
     });
-  } catch (error) {
-    console.error('Decision Drift Radar note draft failed', error?.context?.responseText ?? error);
+  } catch {
+    console.error('Decision Drift Radar AI note draft failed');
     return { ok: false, error: 'The AI could not draft a note right now. You can still write it yourself.' };
   }
 

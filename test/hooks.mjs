@@ -5,6 +5,7 @@
 const MOCKS = {
   '@forge/api': new URL('./mocks/api.mjs', import.meta.url).href,
   '@forge/resolver': new URL('./mocks/resolver.mjs', import.meta.url).href,
+  '@forge/kvs': new URL('./mocks/kvs.mjs', import.meta.url).href,
   '@forge/llm': new URL('./mocks/llm.mjs', import.meta.url).href
 };
 
