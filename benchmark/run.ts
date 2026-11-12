@@ -27,7 +27,9 @@ type Extract = (input: unknown) => { candidates: Array<{ kind: string; evidence:
 
 const KINDS: Kind[] = ['decision', 'open_question', 'proposal'];
 const KIND_NAME: Record<Kind, string> = { decision: 'Decisions', open_question: 'Open questions', proposal: 'Proposals' };
-const SETS = [
+/** `kinds` limits which findings are scored (the recall set labels decisions only). */
+const SETS: Array<{ name: string; dir: string; labels: string; sources: string; kinds?: Kind[] }> = [
+  { name: 'Recall set (decisions only, labels frozen before any run)', dir: 'recall', labels: 'labels-recall.json', sources: 'sources-recall.tsv', kinds: ['decision'] },
   { name: 'Held-out set', dir: 'heldout', labels: 'labels-heldout.json', sources: 'sources-heldout.tsv' },
   { name: 'Development set (used for tuning)', dir: 'corpus', labels: 'labels.json', sources: 'sources.tsv' }
 ];
@@ -56,9 +58,10 @@ function score(set: (typeof SETS)[number], extract: Extract) {
       sources: [{ id: `bench-${doc.file}`, type: 'confluence_page', title: doc.file, url: '', projectKey: 'BENCH', updatedAt: '2026-01-01T00:00:00Z', text }],
       issues: []
     });
-    findingsTotal += candidates.length;
+    const scored = set.kinds ? candidates.filter((c) => set.kinds!.includes(c.kind as Kind)) : candidates;
+    findingsTotal += scored.length;
     const used = new Set<number>();
-    for (const c of candidates) {
+    for (const c of scored) {
       const kind = c.kind as Kind;
       const hit = doc.labels
         .map((label, index) => ({ label, index }))
@@ -129,12 +132,22 @@ for (const set of SETS) {
   const before = baseline ? score(set, baseline) : null;
   lines.push(`## ${set.name}`, '', `${after.files} files, ${after.strict} strict and ${after.ambiguous} ambiguous labels.`, '');
   lines.push('| | Labels | Before tuning | After tuning |', '| --- | --- | --- | --- |');
-  for (const k of KINDS) lines.push(`| ${KIND_NAME[k]} | ${after.byKind[k].tp + after.byKind[k].fn} | ${before ? pair(before.byKind[k]) : 'n/a'} | ${pair(after.byKind[k])} |`);
-  lines.push(`| Anything flagged (kind ignored) | ${after.any.tp + after.any.fn} | ${before ? pair(before.any) : 'n/a'} | ${pair(after.any)} |`, '');
+  for (const k of set.kinds ?? KINDS) lines.push(`| ${KIND_NAME[k]} | ${after.byKind[k].tp + after.byKind[k].fn} | ${before ? pair(before.byKind[k]) : 'n/a'} | ${pair(after.byKind[k])} |`);
+  if (!set.kinds) lines.push(`| Anything flagged (kind ignored) | ${after.any.tp + after.any.fn} | ${before ? pair(before.any) : 'n/a'} | ${pair(after.any)} |`);
+  lines.push('');
+  if (set.kinds) {
+    const d = after.byKind.decision;
+    lines.push(`Current rules: ${d.tp} of ${d.tp + d.fn} decisions found, ${d.fp} false ${d.fp === 1 ? 'alarm' : 'alarms'}. Rules plus the AI pass: pending (the AI pass runs on Atlassian-hosted Forge LLMs and was not run for this set).`, '');
+  }
   lines.push(`After tuning: ${after.findingsTotal} findings, ${after.ignored} of them matching an ambiguous label (not scored).`, '');
   lines.push('### Missed after tuning', '', ...(after.misses.length ? after.misses.map((m) => `- ${m}`) : ['- none']), '');
   lines.push('### Wrong kind after tuning', '', ...(after.wrongKind.length ? after.wrongKind.map((m) => `- ${m}`) : ['- none']), '');
   lines.push('### False alarms after tuning', '', ...(after.falseAlarms.length ? after.falseAlarms.map((m) => `- ${m}`) : ['- none']), '');
+  if (set.kinds) {
+    const d = after.byKind.decision;
+    summary.push(`${set.name}: decisions found ${d.tp}/${d.tp + d.fn}, false alarms ${d.fp}; precision / recall ${before ? pair(before.byKind.decision) : 'n/a'} → ${pair(d)}; rules + AI pass: pending`);
+    continue;
+  }
   summary.push(`${set.name}: anything flagged ${before ? pair(before.any) : 'n/a'} → ${pair(after.any)}; decisions ${before ? pair(before.byKind.decision) : 'n/a'} → ${pair(after.byKind.decision)} (precision / recall)`);
 }
 lines.push('## Sources', '');

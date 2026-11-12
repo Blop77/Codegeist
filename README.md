@@ -50,7 +50,7 @@ See [Atlassian's Jira Forge tutorial](https://developer.atlassian.com/platform/f
 
 ## Accuracy
 
-The rule-based extractor is measured on 16 real, openly licensed meeting-notes files from the OpenJS Foundation and the Rust project, labelled by hand. Half were used to tune the rules; the other half were labelled afterwards and held out. On the held-out notes, 67% of what it flags is a real decision, open question or proposal, and it finds 70% of them. Every decision it flagged was a real decision, but it finds only about a quarter of the decisions in real notes. That gap is what the optional AI pass targets. Method, labels, every miss and false alarm: [benchmark/](benchmark/README.md). Run it with `npm run benchmark`.
+The rule-based extractor is measured on 16 real, openly licensed meeting-notes files from the OpenJS Foundation and the Rust project, labelled by hand. Half were used to tune the rules; the other half were labelled afterwards and held out. On the held-out notes, 67% of what it flags is a real decision, open question or proposal, and it finds 70% of them. Every decision it flagged was a real decision, but recall varies with how a team writes. It found 2 of 8 decisions in the held-out notes, and 7 of 10 in a third set labelled and frozen before any run: 9 of 18 (50%) across both untouched sets, with no false decision calls. That gap is what the optional AI pass targets; its comparison on the frozen set is still pending. Method, labels, every miss and false alarm: [benchmark/](benchmark/README.md). Run it with `npm run benchmark`.
 
 ## Project docs
 

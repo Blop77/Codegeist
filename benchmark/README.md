@@ -4,7 +4,26 @@ How well does the rule-based extractor find decisions, open questions and propos
 
 Run it with `npm run benchmark` (Node 22.18 or later, no install needed). It scores the current rules and the rules as they were before tuning, prints a summary and writes [RESULTS.md](RESULTS.md) with every miss and false alarm.
 
-## Headline (held-out set: notes the rules were never tuned on)
+## Latest: recall set (decisions only, labels frozen before any run)
+
+A third, fresh set measures the decision-recall gap. It uses 8 more files chosen by the same rule (the next-oldest in each source), labelled for **decisions only**. The labels were frozen before anything ran on these files: the checksum and time are in [recall/FROZEN.txt](recall/FROZEN.txt).
+
+| Recall set: 10 strict decisions | Rules before tuning (`d04822a`) | Current rules | Rules + AI pass |
+| --- | --- | --- | --- |
+| Decisions found | 3 | **7** | pending |
+| False alarms | 0 | **0** | pending |
+| Precision / recall | 100% / 30% | **100% / 70%** | pending |
+
+- **The AI pass is pending.** It runs on Atlassian-hosted Forge LLMs inside a deployed app, so it could not run in this local benchmark.
+- **Missed by the current rules:**
+  - "Agreed this will be the topic for the next working group meeting" ("Agreed" without a following "to", "that" or ":");
+  - "We definitely want this feature.";
+  - "CONCLUSION: pnkfelix to comment on the issue." ("Conclusion:" is not one of the recognised labels).
+
+  They are recorded here, but the rules were not changed for them, so this set stays an untouched measure.
+- **Reading it together with the held-out set:** on the held-out set the same current rules found 2 of 8 decisions; here they found 7 of 10. Across both untouched sets that is **9 of 18 decisions (50%), with no false decision calls**. Most of this set's decisions are OpenJS outcome lines ("There was consensus…", "…it was therefore approved"), which the tuned rules recognise. Most of the held-out set's decisions were phrased as "Let’s…" or in prose. Recall depends heavily on how a team writes, and 18 decisions is a small sample.
+
+## Historical: held-out set (notes the rules were never tuned on)
 
 | Held-out set: precision / recall | Before tuning | After tuning |
 | --- | --- | --- |
@@ -13,7 +32,7 @@ Run it with `npm run benchmark` (Node 22.18 or later, no install needed). It sco
 | Open questions | 50% / 57% | 57% / 86% |
 | Proposals | 67% / 80% | 75% / 80% |
 
-8 files, 37 strict labels. These numbers come from the first run of either rule version on these files.
+8 files, 37 strict labels. These numbers come from the first run of either rule version on these files. They are kept as the historical result of the tuning round.
 
 **What this says, plainly**
 
@@ -23,7 +42,7 @@ Run it with `npm run benchmark` (Node 22.18 or later, no install needed). It sco
 
 **A bug found by the held-out run.** Typographic apostrophes ("Let’s", which Confluence often stores) were not recognised by any rule. This was fixed after the held-out run, so it doesn't affect the headline numbers. With the fix, the held-out "anything flagged" score is 69% / 78%, and decisions are unchanged at 100% / 25%. [RESULTS.md](RESULTS.md) is generated from the current rules, so it includes the fix.
 
-## Development set (used for tuning)
+## Historical: development set (used for tuning)
 
 | Development set: precision / recall | Before tuning | After tuning |
 | --- | --- | --- |
@@ -44,12 +63,15 @@ Files were chosen by a fixed rule decided before reading them: the most recent m
 | | Rust language team 2022-11-22 | [rust-lang/lang-team](https://github.com/rust-lang/lang-team) `minutes/` | Apache-2.0 |
 | | Rust traits working group 2019-02-24, 03-04, 03-11 | [rust-lang/compiler-team](https://github.com/rust-lang/compiler-team) `content/working-groups/traits/minutes/` | Apache-2.0 |
 | Held-out (`heldout/`) | OpenJS CPC 2025-06-09, 06-24, 07-08, 07-22 | as above | MIT |
+| Recall (`recall/`) | OpenJS CPC 2025-04-15, 04-29, 05-13, 05-27 | as above | MIT |
+| | Rust language team 2022-11-08 | as above | Apache-2.0 |
+| | Rust Polonius working group 2019-04-30, 05-07, 05-14 | as above | Apache-2.0 |
 | | Rust language team 2022-11-15 | as above | Apache-2.0 |
 | | Rust Polonius working group 2019-05-28, 06-04, 06-11 | [rust-lang/compiler-team](https://github.com/rust-lang/compiler-team) `content/working-groups/polonius/minutes/` | Apache-2.0 |
 
 The traits working group has only three minutes files, so the held-out set takes its three prose summaries from the Polonius working group instead. That rule was stated before reading them: the next working group in the same repository with the most minutes.
 
-Files are unmodified copies. [sources.tsv](sources.tsv) and [sources-heldout.tsv](sources-heldout.tsv) record each source path and commit, and `corpus/LICENSES/` holds the licences. Copyright remains with the original authors: the OpenJS Foundation and contributors, and the Rust project contributors.
+Files are unmodified copies. [sources.tsv](sources.tsv), [sources-heldout.tsv](sources-heldout.tsv) and [sources-recall.tsv](sources-recall.tsv) record each source path and commit, and `corpus/LICENSES/` holds the licences. Copyright remains with the original authors: the OpenJS Foundation and contributors, and the Rust project contributors.
 
 ## Method
 
@@ -73,7 +95,7 @@ Files are unmodified copies. [sources.tsv](sources.tsv) and [sources-heldout.tsv
 
 ## Limits
 
-- **Small sample:** 66 strict labels across 16 files. Read the percentages as indicative, not precise.
+- **Small sample:** 66 strict labels across 16 files, plus 10 strict decisions in the recall set. Read the percentages as indicative, not precise.
 - **Who labelled:** the labels were written by the app's authors. They are published so anyone can check or dispute them.
 - **Duplicates:** in one held-out file, "Is AI-assisted development allowed?" appears twice and was labelled twice. The app reports a repeated sentence from the same page once, so one of the two counts as a miss.
 - **Kind of notes:** open-source governance notes are not a company team's Confluence pages, but they are real and unedited, which is the point.
