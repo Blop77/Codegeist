@@ -295,6 +295,25 @@ check('reference lines under a decisions heading are not decisions', () => {
   assert.equal(defaultClassifier('Social posts go live after the website update.', heading)?.kind, 'decision');
 });
 
+check('agenda-style outcomes, standalone questions and curly apostrophes are recognised', () => {
+  const plain = { sourceType: 'confluence_page' as const, sourceTitle: 'Meeting notes', underDecisionHeading: false, decisionListItem: false };
+  const kind = (sentence: string) => defaultClassifier(sentence, plain)?.kind ?? null;
+  // Wording from the benchmark's development set (benchmark/corpus), kept as regression cases.
+  assert.equal(kind('Decide to ask for board and/or legal advice'), 'decision');
+  assert.equal(kind("The CPC decided against this; if you're making changes to the charter, you need to run those changes to the CPC."), 'decision');
+  assert.equal(kind("General agreement that we don't want to formalize this by creating a policy."), 'decision');
+  assert.equal(kind('Is AI-assisted development allowed?'), 'open_question');
+  assert.equal(kind('Should there be a lang FCP for this?'), 'open_question');
+  assert.equal(kind('Let’s draft the policy next week.'), 'proposal', 'a curly apostrophe reads like a straight one');
+  // Not proposals: a question that mentions a proposal, a title, and a lead-in to a list.
+  assert.equal(kind("josh: is the proposal that it's a valid tt or a valid literal?"), null);
+  assert.equal(kind('"Meeting proposal: Rust Specification" lang-team#179'), null);
+  assert.equal(kind('Specifically, we should be able to have:'), null);
+  // Conversation lines that start with a speaker are not agenda questions.
+  assert.equal(kind('josh: which case are we in?'), 'open_question', 'still caught by "which", a known false alarm');
+  assert.equal(kind('scott: is it breaking?'), null);
+});
+
 check('AI proposals are kept only when the quote is verbatim, new and well formed', () => {
   const indirect = 'After the review, the team is going ahead with Tuesday-only sends for the email campaign.';
   const page = { ...mcDemoInput.sources[0], text: `${mcDemoInput.sources[0].text}\n${indirect}\nThis was not approved.` };
