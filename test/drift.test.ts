@@ -118,7 +118,7 @@ test('project scans track drift, resolve it when the issue is fixed, and flag ne
   const first = await scan();
   assert.equal(first.ok, true);
   assert.equal(first.previousVisitAt, null);
-  assert.deepEqual(first.radar, { findings: 1, newSinceLastVisit: 0, drifting: 1, resolved: 0 });
+  assert.deepEqual(first.radar, { findings: 1, newSinceLastVisit: 0, drifting: 1, resolved: 0, issuesDrifting: 1 });
   const decision = first.candidates[0];
   const dd1 = decision.affectedIssues.find((a: any) => a.issueKey === 'DD-1');
   assert.equal(dd1.drift.status, 'open');
@@ -128,7 +128,7 @@ test('project scans track drift, resolve it when the issue is fixed, and flag ne
   await pause(5);
   const second = await scan();
   assert.ok(second.previousVisitAt);
-  assert.deepEqual(second.radar, { findings: 1, newSinceLastVisit: 0, drifting: 0, resolved: 1 });
+  assert.deepEqual(second.radar, { findings: 1, newSinceLastVisit: 0, drifting: 0, resolved: 1, issuesDrifting: 0 });
   const resolved = [...second.candidates[0].affectedIssues.map((a: any) => a.drift), ...second.candidates[0].resolvedIssues].find(Boolean);
   assert.equal(resolved.status, 'resolved');
   assert.equal(resolved.resolvedBy, 'scan');
@@ -192,4 +192,17 @@ test('the radar never blocks a scan when its record cannot be read', async () =>
   } finally {
     kvsModule.kvs.get = get;
   }
+});
+
+test('totals count drifts, not issues: two decisions on one issue are two open drifts', async () => {
+  const { applyScan: apply, describeFindings: describe, radarSummary: summarize } = await import('../src/resolvers/drift.js');
+  const issue = { key: 'DD-9', title: 'Plan the launch', description: 'Scheduling: separate channel plans, on Mondays.' };
+  const two = [
+    { id: 'dc_one', summary: 'Use one shared plan instead of separate channel plans.', affectedIssues: [outdated('DD-9', 'separate channel plans')] },
+    { id: 'dc_two', summary: 'Send on Fridays instead of on Mondays.', affectedIssues: [outdated('DD-9', 'on Mondays')] }
+  ];
+  const { radar } = apply({ findings: {}, drifts: {} }, { candidates: two, issueRecords: [issue], now: 't1' });
+  const counts = summarize(describe(radar, { candidates: two, issueRecords: [issue] }));
+  assert.equal(counts.drifting, 2, 'one open drift per decision and issue');
+  assert.equal(counts.issuesDrifting, 1, 'but only one issue');
 });

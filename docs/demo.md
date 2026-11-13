@@ -51,9 +51,9 @@ After later changes, deploy to production again. Reviewers who already installed
 
 Use MC-10 as the main story. Show **Social calendar: decisions** and its **Found through Teamwork Graph** label, then show Jira's original scheduling line. It tells the team to publish on the same day as the website update, while the Confluence decision says to publish the day after.
 
-On the demo issue, replace the scheduling line with `Scheduling: social posts go live the day after the website update.` Save and leave the Radar project page and issue panel closed for at least four minutes. Cut over the wait in the video. Return to the issue panel and show **Resolved**, **No longer mentions “on the same day”**, and **noticed when the issue was edited**. The project summary moved from **3 issues still drifting** to **2 issues still drifting · 1 resolved** in the development test. The edit was made by a person. Radar detected the change.
+On the demo issue, replace the scheduling line with `Scheduling: social posts go live the day after the website update.` Save and leave the Radar project page and issue panel closed for at least four minutes. Cut over the wait in the video. Return to the issue panel and show **Old wording removed** and **Replacement wording found**, "No longer mentions “on the same day”", **noticed when the issue was edited**, and "Now mentions “after the website update”, the wording the decision asks for." The project summary moves from **3 open drifts** to **2 open drifts · 1 resolved drift**. (The 3.x builds before this change labelled these counts "issues still drifting" and the status **Resolved**.) The edit was made by a person. Radar detected the change.
 
-After capturing the result, restore `Scheduling: social posts go live on the same day as the website update.` and rescan. The development test confirmed **3 issues still drifting · 0 resolved** after restoration.
+After capturing the result, restore `Scheduling: social posts go live on the same day as the website update.` and rescan. The development test confirmed the drift reopens with its original date after restoration (**3 open drifts · 0 resolved drifts**).
 
 ## Sample data and its limits
 

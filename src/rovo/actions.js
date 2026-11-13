@@ -146,7 +146,13 @@ async function withReviews(projectKey, scanned) {
 function driftView(drift) {
   if (!drift) return null;
   return drift.status === 'resolved'
-    ? { status: 'resolved', phrase: drift.phrase, resolvedOn: String(drift.resolvedAt ?? '').slice(0, 10), resolvedBy: drift.resolvedBy === 'issue-update' ? 'an edit to the issue' : 'a later scan' }
+    ? {
+      status: 'old wording removed',
+      phrase: drift.phrase,
+      resolvedOn: String(drift.resolvedAt ?? '').slice(0, 10),
+      resolvedBy: drift.resolvedBy === 'issue-update' ? 'an edit to the issue' : 'a later scan',
+      ...(drift.replacement ? { replacement: drift.replacement, replacementFound: Boolean(drift.replacementFound) } : {})
+    }
     : { status: 'still drifting', phrase: drift.phrase, since: String(drift.firstSeenAt ?? '').slice(0, 10) };
 }
 

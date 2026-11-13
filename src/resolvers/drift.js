@@ -13,7 +13,7 @@
 import { createHash } from 'node:crypto';
 import api, { route } from '@forge/api';
 import { Filter, FilterConditions, kvs } from '@forge/kvs';
-import { issueStillMentions } from '../domain/matchIssues';
+import { extractChange, issueStillMentions } from '../domain/matchIssues';
 import { adfToText } from './normalize';
 
 const MAX_FINDINGS = 300;
@@ -194,19 +194,31 @@ export function applyScan(radar, { candidates, issueRecords, now = new Date().to
  * Adds radar state to findings for display: `isNew` (first seen after `previousVisitAt`),
  * `drift` on each affected issue, and `resolvedIssues` for issues that no longer match at all.
  * Only findings already in `candidates` (what this user's scan returned) are described.
+ *
+ * A resolved drift only proves the old wording is gone (deleting the line resolves it too). When
+ * the decision names its replacement ("X instead of Y") and the issue's current text contains it,
+ * the drift also carries `replacement` and `replacementFound: true`, checked against this scan's
+ * text, so the app can say "Replacement wording found" separately.
  */
 export function describeFindings(radar, { candidates, issueRecords, previousVisitAt = null }) {
-  const readable = new Set(issueRecords.map((issue) => issue.key));
+  const readable = new Map(issueRecords.map((issue) => [issue.key, issue]));
   const drifts = Object.values(radar.drifts).filter((drift) => readable.has(drift.issueKey));
   return candidates.map((candidate) => {
     const firstSeenAt = radar.findings[candidate.id]?.firstSeenAt ?? null;
     const mine = drifts.filter((d) => d.findingId === candidate.id);
     const byIssue = new Map(mine.map((d) => [d.issueKey, d]));
     const listed = new Set((candidate.affectedIssues ?? []).map((a) => a.issueKey));
-    const view = (d) => ({
-      status: d.status, phrase: d.phrase, firstSeenAt: d.firstSeenAt,
-      ...(d.resolvedAt ? { resolvedAt: d.resolvedAt, resolvedBy: d.resolvedBy } : {})
-    });
+    const replacement = extractChange(candidate.summary ?? '')?.to;
+    const view = (d) => {
+      const issue = readable.get(d.issueKey);
+      const replacementFound = d.status === 'resolved' && Boolean(replacement) && issue?.description !== undefined
+        && issueStillMentions(issue, replacement);
+      return {
+        status: d.status, phrase: d.phrase, firstSeenAt: d.firstSeenAt,
+        ...(d.resolvedAt ? { resolvedAt: d.resolvedAt, resolvedBy: d.resolvedBy } : {}),
+        ...(d.status === 'resolved' && replacement ? { replacement, replacementFound } : {})
+      };
+    };
     return {
       ...candidate,
       firstSeenAt,
@@ -221,18 +233,32 @@ export function describeFindings(radar, { candidates, issueRecords, previousVisi
   });
 }
 
-/** Counts for the summary line, over the findings this user can see. */
+/**
+ * Counts for the summary line, over the findings this user can see. `drifting` and `resolved`
+ * count drifts (one per decision and affected issue), not issues: an issue affected by two
+ * decisions counts twice. `issuesDrifting` counts distinct issues with at least one open drift.
+ */
 export function radarSummary(described) {
+  const openIssues = new Set();
   let drifting = 0;
   let resolved = 0;
   for (const candidate of described) {
     for (const affected of candidate.affectedIssues) {
-      if (affected.drift?.status === 'open') drifting++;
+      if (affected.drift?.status === 'open') {
+        drifting++;
+        openIssues.add(affected.issueKey);
+      }
       if (affected.drift?.status === 'resolved') resolved++;
     }
     resolved += candidate.resolvedIssues.length;
   }
-  return { findings: described.length, newSinceLastVisit: described.filter((c) => c.isNew).length, drifting, resolved };
+  return {
+    findings: described.length,
+    newSinceLastVisit: described.filter((c) => c.isNew).length,
+    drifting,
+    resolved,
+    issuesDrifting: openIssues.size
+  };
 }
 
 /**

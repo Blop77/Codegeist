@@ -259,8 +259,8 @@ function App() {
               {result.previousVisitAt
                 ? ` · ${result.radar.newSinceLastVisit} new since your last visit (${new Date(result.previousVisitAt).toLocaleDateString()})`
                 : ' · first visit: later scans will mark new findings'}
-              {` · ${result.radar.drifting} ${result.radar.drifting === 1 ? 'issue' : 'issues'} still drifting · ${result.radar.resolved} resolved.`}
-              {' Drift is marked resolved when the issue stops using the replaced wording, on the next scan or as soon as the issue is edited.'}
+              {` · ${result.radar.drifting} open ${result.radar.drifting === 1 ? 'drift' : 'drifts'} · ${result.radar.resolved} resolved ${result.radar.resolved === 1 ? 'drift' : 'drifts'}.`}
+              {' A drift is one decision and one issue that still uses the wording it replaced, so one issue can have several. A drift counts as resolved once the issue stops using that wording, found on the next scan or as soon as the issue is edited.'}
             </SectionMessage>
           )}
           {result.radarWarning && <SectionMessage appearance="warning" title="Drift history unavailable">{result.radarWarning}</SectionMessage>}
