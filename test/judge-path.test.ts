@@ -71,6 +71,18 @@ const { handler } = await import('../src/resolvers/index.js');
 const actions = await import('../src/rovo/actions.js');
 const { discoverViaGraph } = await import('../src/resolvers/graph.js');
 const ctx = { accountId: 'judge-1', siteUrl: SITE, cloudId: 'cloud-1' };
+
+const { runAiJob } = await import('../src/resolvers/ai.js');
+/** Starts the AI pass, runs the queued job as Forge would, then reads the result as the page does. */
+async function runAiPass(projectKey: string) {
+  const started = await handler.getAiFindings({ payload: { projectKey }, context: ctx });
+  if (!started.ok || !started.pending) return started;
+  const waiting = await handler.getAiJob({ payload: { projectKey }, context: ctx });
+  assert.equal(waiting.pending, true, 'the page sees the job running');
+  while (g.__queued?.length) await runAiJob(g.__queued.shift());
+  return handler.getAiJob({ payload: { projectKey }, context: ctx });
+}
+
 const affectedKeys = (candidates: any[]) => candidates.flatMap((c: any) => c.affectedIssues.map((a: any) => a.issueKey));
 
 test('the issue panel weighs words across the project, so it agrees with the project scan', async () => {
@@ -151,18 +163,54 @@ test('Rovo refuses an invalid key instead of scanning the page’s project, and 
 test('an AI reply that cannot be read is reported and does not use up the daily limit', async () => {
   const day = new Date().toISOString().slice(0, 10);
   memory.delete(`ai-usage:${day}`);
-  g.__chat = async () => ({ choices: [{ finish_reason: 'length', message: { content: '{"findings":[{"sourceId":"page-880","quote":"We agreed to' } }] });
-  const cut = await handler.getAiFindings({ payload: { projectKey: 'QA' }, context: ctx });
+  g.__chat = async () => ({ choices: [{ finish_reason: 'length', message: { content: '{"findings":[{"id":"1.' } }] });
+  const cut = await runAiPass('QA');
   assert.equal(cut.ok, false);
   assert.match(cut.error, /could not be read/);
   assert.equal(memory.get(`ai-usage:${day}`), 0, 'the run was given back');
   assert.equal(memory.has('ai-last:QA'), false, 'no cooldown after a failed run');
 
   g.__chat = async () => ({ choices: [{ message: { content: '{"findings":[]}' } }] });
-  const none = await handler.getAiFindings({ payload: { projectKey: 'QA' }, context: ctx });
+  const none = await runAiPass('QA');
   assert.equal(none.ok, true);
   assert.equal(none.newCount, 0, 'an empty list is still a real answer');
   assert.equal(memory.get(`ai-usage:${day}`), 1);
+});
+
+test('the AI pass runs as a background job with the measured output cap, one job per project', async () => {
+  memory.delete('ai-last:QA');
+  memory.delete('ai-job:QA');
+  g.__llmCalls = [];
+  g.__chat = async () => ({ choices: [{ message: { content: '{"findings":[]}' } }] });
+  const started = await handler.getAiFindings({ payload: { projectKey: 'QA' }, context: ctx });
+  assert.deepEqual([started.ok, started.pending], [true, true]);
+  assert.equal(g.__llmCalls.length, 0, 'the resolver itself never waits on the model');
+  const again = await handler.getAiFindings({ payload: { projectKey: 'QA' }, context: ctx });
+  assert.equal(again.pending, true, 'a second click joins the running job');
+  assert.equal(g.__queued.length, 1, 'and starts no second job');
+  assert.doesNotMatch(JSON.stringify(memory.get('ai-job:QA')), /Footer|footer|email/, 'the job record holds no page or issue text');
+
+  await runAiJob(g.__queued.shift());
+  assert.equal(g.__llmCalls.length, 1);
+  assert.equal(g.__llmCalls[0].max_completion_tokens, 12000, 'the cap the benchmark measured');
+  const done = await handler.getAiJob({ payload: { projectKey: 'QA' }, context: ctx });
+  assert.deepEqual([done.ok, done.pending], [true, false]);
+});
+
+test('a job that cannot be queued is reported and given back', async () => {
+  memory.delete('ai-last:QA');
+  memory.delete('ai-job:QA');
+  const day = new Date().toISOString().slice(0, 10);
+  const before = memory.get(`ai-usage:${day}`) ?? 0;
+  g.__queueFail = true;
+  try {
+    const started = await handler.getAiFindings({ payload: { projectKey: 'QA' }, context: ctx });
+    assert.equal(started.ok, false);
+    assert.match(started.error, /could not be started/);
+    assert.equal(memory.get(`ai-usage:${day}`), before);
+  } finally {
+    g.__queueFail = false;
+  }
 });
 
 test('saved note records are shown only for issues in the viewer’s own scan', async () => {

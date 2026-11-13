@@ -6,3 +6,5 @@ export {
   findProjectDecisions,
   prepareDecisionNote
 } from './rovo/actions';
+
+export { runAiJob } from './resolvers/ai';

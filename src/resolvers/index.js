@@ -3,7 +3,7 @@ import api, { route, storage } from '@forge/api';
 import { toIssueSummary } from './normalize';
 import { analyze, readIssueRecord, resolveFindingForIssue, safeError, scanIssue, scanProject, validProjectKey } from './scan';
 import { SAMPLE_GRAPH, SAMPLE_PROJECT_KEY, sampleIssues, sampleSources } from './sample-data';
-import { draftNoteWithAi, findWithAi } from './ai';
+import { aiJobStatus, draftNoteWithAi, findWithAi, startAiJob } from './ai';
 import { confirmRovoDraft, loadRovoDraft } from './rovo-drafts';
 import { lastVisit, saveVisit, trackScan } from './drift';
 import {
@@ -263,8 +263,8 @@ resolver.define('getSampleRadar', async () => {
 });
 
 /**
- * Optional AI pass for a real project: rescans as the user, then asks the model only for what the
- * rules missed. Findings come back with review state, like a normal scan.
+ * Optional AI pass for a real project: rescans as the user, then starts a background job that asks
+ * the model only for what the rules missed. The page polls `getAiJob` for the result.
  */
 resolver.define('getAiFindings', async ({ payload, context }) => {
   const projectKey = String(payload?.projectKey ?? '').trim().toUpperCase();
@@ -273,21 +273,41 @@ resolver.define('getAiFindings', async ({ payload, context }) => {
   try {
     const scanned = await scanProject(projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
-    const result = await findWithAi({
-      scopeKey: projectKey,
-      sources: scanned.sources,
-      issues: scanned.issueRecords,
-      known: [...scanned.candidates, ...scanned.aiCandidates],
-      saveFor: projectKey
-    });
-    if (!result.ok) return result;
-    // Earlier AI findings first, then the new ones, all with their reviews.
-    const all = [...scanned.aiCandidates, ...result.candidates.map((c) => ({ ...c, ai: true }))];
-    const { candidates } = await attachReviewState(projectKey, all);
-    return { ...result, candidates, newCount: result.candidates.length };
+    return await startAiJob({ projectKey, sources: scanned.sources, known: [...scanned.candidates, ...scanned.aiCandidates] });
   } catch (error) {
     console.error('Decision Drift Radar AI findings failed', error);
-    return { ok: false, error: 'The AI pass could not complete. The rule-based findings above are unaffected.' };
+    return { ok: false, error: 'The AI pass could not start. The rule-based findings above are unaffected.' };
+  }
+});
+
+/**
+ * The project's AI job. While it runs: `{ pending: true }`. When done: the project's AI findings
+ * from a fresh scan as the user (so only sources they can read), with reviews, and how many are new.
+ */
+resolver.define('getAiJob', async ({ payload, context }) => {
+  const projectKey = String(payload?.projectKey ?? '').trim().toUpperCase();
+  if (!validProjectKey(projectKey)) return { ok: false, error: 'Choose a Jira project first.' };
+  if (!context?.accountId) return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
+  try {
+    const job = await aiJobStatus(projectKey);
+    if (job.state === 'running') return { ok: true, pending: true, startedAt: job.startedAt };
+    if (job.state === 'failed') return { ok: false, error: job.error };
+    if (job.state !== 'done') return { ok: false, error: 'No AI pass has run for this project yet.' };
+    const scanned = await scanProject(projectKey, { cloudId: context?.cloudId });
+    if (!scanned.ok) return { ok: false, error: scanned.error };
+    const { candidates } = await attachReviewState(projectKey, scanned.aiCandidates);
+    const fresh = new Set(job.findingIds ?? []);
+    return {
+      ok: true,
+      pending: false,
+      candidates,
+      newCount: candidates.filter((c) => fresh.has(c.id)).length,
+      rejected: job.rejected ?? 0,
+      finishedAt: job.finishedAt
+    };
+  } catch (error) {
+    console.error('Decision Drift Radar AI job status failed', error);
+    return { ok: false, error: 'Could not read the AI pass status. Refresh and try again.' };
   }
 });
 

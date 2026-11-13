@@ -1,20 +1,18 @@
 # Accuracy benchmark
 
-How well does the rule-based extractor find decisions, open questions and proposals in real meeting notes that were never written for it? This benchmark measures that on 16 meeting-notes files from open-source projects, labelled by hand.
+How well does the rule-based extractor find decisions, open questions and proposals in real meeting notes that were never written for it? This benchmark uses 24 hand-labelled meeting-notes files from open-source projects. The two evaluation sets contain 16 files and 18 strict decision labels between them.
 
 Run it with `npm run benchmark` (Node 22.18 or later, no install needed). It scores the current rules and the rules as they were before tuning, prints a summary and writes [RESULTS.md](RESULTS.md) with every miss and false alarm.
 
-## Latest: recall set (decisions only, labels frozen before any run)
+## Recall set (decisions only, labels frozen before any run)
 
 A third, fresh set measures the decision-recall gap. It uses 8 more files chosen by the same rule (the next-oldest in each source), labelled for **decisions only**. The labels were frozen before anything ran on these files: the checksum and time are in [recall/FROZEN.txt](recall/FROZEN.txt).
 
 | Recall set: 10 strict decisions | Rules before tuning (`d04822a`) | Current rules | Rules + AI pass |
 | --- | --- | --- | --- |
-| Decisions found | 3 | **7** | pending |
-| False alarms | 0 | **0** | pending |
-| Precision / recall | 100% / 30% | **100% / 70%** | pending |
-
-- **The AI pass is pending.** It runs on Atlassian-hosted Forge LLMs inside a deployed app, so it could not run in this local benchmark.
+| Decisions found | 3 | 7 | 9 |
+| False alarms | 0 | 0 | 1 |
+| Precision / recall | 100% / 30% | 100% / 70% | 90% / 90% |
 - **Missed by the current rules:**
   - "Agreed this will be the topic for the next working group meeting" ("Agreed" without a following "to", "that" or ":");
   - "We definitely want this feature.";
@@ -36,7 +34,7 @@ A third, fresh set measures the decision-recall gap. It uses 8 more files chosen
 
 **What this says, plainly**
 
-- **Precision on decisions is perfect on small numbers, recall is low.** Every decision the rules flagged was a real decision, in both sets, before and after tuning: 2 flagged decisions on the held-out set and 7 on the recall set. But they find only about a quarter to a third of the decisions in real notes. In the app, a finding is shown to a person and can become a Jira comment, so precision is the property we protect. Recall is the known gap, and the reason for the optional AI pass.
+- **Precision on decisions is perfect on small numbers, recall is low.** Every decision the rules flagged was a real decision, in both sets, before and after tuning: 2 flagged decisions on the held-out set and 7 on the recall set. Recall was 25% on the held-out set and 70% on the recall set. In the app, a finding is shown to a person and can become a Jira comment, so precision is the property we protect. Recall is the known gap, and the reason for the optional AI pass.
 - **Tuning helped questions and proposals, not decisions.** On the files used for tuning, decision recall rose from 30% to 70%. On the held-out files it did not move (25%). The new decision phrasings ("Decide to…", "General agreement that…", "decided against") are real but rare. The held-out misses are phrased differently again: "Let’s not block the sub-issues on this.", "We clarified that…", "It was also deemed…", "pnkfelix to report consensus…".
 - **Most false alarms come from chat transcripts.** In the Rust language team transcript, conversational questions that are answered moments later ("scottmcm: are we sure we can do that?") are flagged as open questions.
 
@@ -52,6 +50,29 @@ A third, fresh set measures the decision-recall gap. It uses 8 more files chosen
 | Proposals | 45% / 71% | 86% / 86% |
 
 8 files, 29 strict labels. The rules were changed while looking at these files, so the "after" column overstates real-world accuracy; the held-out set is the fair measure.
+
+## Numbered-sentence AI evaluation protocol
+
+Use the Forge Claude model and the candidate numbered-sentence `askModel` code. First run the development corpus as a pipeline check. Then run the recall set once and the held-out set once, in that order, with the same prompt, extractor, input limits and frozen labels. Send one prepared public meeting-notes page per model call. Pass the rule findings as already found. Never send the annotation labels or Jira data. The model returns sentence IDs. The app maps them to source text and runs its normal evidence verifier.
+
+Record the model, run timestamp, per-file input hash, verified AI findings, rejected count and reported usage. Score the rules alone and the rules plus verified AI findings with the same scorer and ambiguous-label policy. Report decision hits, false positives, misses and precision/recall with denominators. Report input clipping and ambiguous matches alongside the scores. An incomplete set has no comparative score. Do not retry an ambiguous or failed scored call automatically.
+
+For the background run, the development pipeline check exposed a 3,000-output-token cutoff before either scored set was sent. The scored protocol used a 12,000-output-token cap with the same prompt, source preparation, label files and scorer. It reused the four completed development pilot results and completed the remaining pipeline-check files before starting either scored set. The development corpus results use both caps and are diagnostic only.
+
+The standalone runner `node benchmark/run-ai.ts` uses an approved HTTPS development endpoint via `DDR_BENCH_URL` and `DDR_BENCH_TOKEN`. This run used a temporary background worker inside the authenticated development app. Keep endpoint credentials and temporary harness code outside the release diff. Rerun `npm run benchmark` to score [the recorded results](ai-results.json) locally.
+
+### Results on the two evaluation sets
+
+The background run used Forge development 6.17.0 with `claude-sonnet-5`, one public meeting note per call, on 13 November 2026. All prepared source lines fit in the input budget. At the time of the run the app still used a 3,000-output-token cap inside a synchronous request. The app has since been changed to match this run: for a real project the AI pass now runs as a background job with the same prompt, numbered sentences, input budget, 12,000-output-token cap and verification. A project scan can hold up to 15 sources rather than one page per call, so these per-page results are still an estimate of what the app does on a real project.
+
+| Set | Mode | True decisions | False decision flags | Misses | Precision / recall | Ambiguous matches excluded |
+| --- | --- | ---: | ---: | ---: | --- | ---: |
+| Recall | Rules | 7 | 0 | 3 | 100% / 70% | 0 |
+| Recall | Rules + AI | 9 | 1 | 1 | 90% / 90% | 1 |
+| Held-out | Rules | 2 | 0 | 6 | 100% / 25% | 15 |
+| Held-out | Rules + AI | 2 | 8 | 6 | 20% / 25% | 44 |
+
+The recall set scores decisions only. On the held-out set, across all finding kinds with kind ignored, precision fell from 69% to 49% and recall rose from 78% to 84%. Across all kinds, all 35 recall-set and 50 held-out AI suggestions passed the exact-quote check. This check establishes that the quote exists in the source. Whether it records a real decision is a separate judgement. The held-out comparison supports keeping AI optional and visibly labelled.
 
 ## Corpus
 
