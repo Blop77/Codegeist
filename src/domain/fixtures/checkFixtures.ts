@@ -350,6 +350,24 @@ check('only list items under a Decisions heading fall back to decisions', () => 
   assert.equal(items[0].summary, 'Virtual async training for all new hires from January.');
 });
 
+check('reversed decisions, hedged opinions, conditions and answered questions are not decisions', () => {
+  const run = (text: string) => extractDecisions({ sources: [{ id: 's', type: 'confluence_page', title: 'Notes', url: '', text, projectKey: 'PAY', updatedAt: '2026-11-01T00:00:00Z' }], issues: [] }).candidates.map((c) => `${c.kind}: ${c.summary}`);
+  // Reversed or withdrawn.
+  assert.deepEqual(run('The decision to adopt Postgres was reversed last week.'), []);
+  assert.deepEqual(run('We rescinded the earlier agreement on the rollout plan.'), []);
+  assert.deepEqual(run('We are no longer going with the vendor option.'), []);
+  // A real decision about reverting is still a decision.
+  assert.equal(run('We decided to revert the change.').length, 1);
+  // An individual hedged view, a condition and a future decision are not commitments.
+  assert.deepEqual(run('josh: I think we agreed to ship it on Friday.'), []);
+  assert.deepEqual(run('We will decide on the vendor next week.'), []);
+  assert.deepEqual(run('Once we agree on the API, work starts.'), []);
+  assert.deepEqual(run('Decision: ship on Friday.'), ['decision: Ship on Friday.']);
+  // A speaker's question answered by the next speaker is not an open question; an unanswered agenda one is.
+  assert.deepEqual(run(['- josh: which case are we in?', '- scottmcm: the second one, we have a deprecation path.'].join('\n')), []);
+  assert.equal(run('Should we adopt the new billing API?').length, 1);
+});
+
 if (failures > 0) {
   console.log(`\n${failures} check(s) failed`);
   process.exit(1);

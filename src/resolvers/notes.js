@@ -2,10 +2,10 @@
  * Review records and the app's one Jira write (a reviewed note posted as a comment), shared by
  * the app's resolvers and the Rovo agent's actions so both enforce the same rules.
  */
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import api, { route, startsWith, storage } from '@forge/api';
 import { Filter, FilterConditions, kvs } from '@forge/kvs';
-import { noteCommentBody } from './normalize';
+import { GENERIC_NOTE, noteComment } from './normalize';
 
 export const MAX_NOTE_LENGTH = 2000;
 export const MAX_QUOTE_LENGTH = 320;
@@ -74,15 +74,90 @@ export function defaultNoteText(candidate) {
 
 /**
  * Checks a note before it is posted. Returns an error message, or null when the note is valid.
- * `issueKey` must belong to `projectKey`.
+ * `issueKey` must belong to `projectKey`. A generic follow-up has fixed text and no quote.
  */
-export function noteProblem({ projectKey, candidateId, issueKey, note, quote }) {
+export function noteProblem({ projectKey, candidateId, issueKey, note, quote, mode = 'quoted' }) {
   if (!validReviewTarget(projectKey, candidateId) || !new RegExp(`^${projectKey}-\\d+$`).test(issueKey)) {
     return 'This note is invalid. Refresh the project scan and try again.';
   }
+  if (mode !== 'quoted') return null;
   if (!note || note.length > MAX_NOTE_LENGTH) return `Write a note of up to ${MAX_NOTE_LENGTH} characters.`;
   if (!quote || quote.length > MAX_QUOTE_LENGTH) return 'This note is missing its source quote. Refresh the project scan and try again.';
   return null;
+}
+
+const ISSUE_IN_PATH = /\/browse\/([A-Z][A-Z0-9_]{1,9}-\d+)/;
+
+/**
+ * Whether the finding's source text may be copied into a comment on an issue in `projectKey`.
+ *
+ * A Jira comment can be read by everyone who can see the issue. The app can only prove that this
+ * whole audience can also see the source when the source is a Jira issue or comment in the same
+ * project with no issue security level and no comment visibility restriction: then everyone who
+ * can browse the project can read it, and every reader of the target issue can browse the project.
+ * A Confluence page's audience (space permissions and page restrictions) cannot be compared with a
+ * Jira issue's audience using the app's permissions, and reading a source as one person, or that
+ * person's confirmation, does not establish it. So a Confluence source is never quoted.
+ * Returns `{ quoted, reason }`; anything the app cannot check counts as not established.
+ */
+export async function sourceSharing(candidate, projectKey) {
+  const { source } = candidate;
+  if (source.type !== 'jira_issue' && source.type !== 'jira_comment') return { quoted: false, reason: 'confluence' };
+  const sourceIssue = ISSUE_IN_PATH.exec(source.url ?? '')?.[1];
+  if (!sourceIssue || sourceIssue.split('-')[0] !== projectKey) return { quoted: false, reason: 'other-project' };
+  try {
+    const issue = await api.asUser().requestJira(route`/rest/api/3/issue/${sourceIssue}?fields=security,project`);
+    if (!issue.ok) return { quoted: false, reason: 'unchecked' };
+    const fields = (await issue.json())?.fields ?? {};
+    if (fields.project?.key !== projectKey) return { quoted: false, reason: 'other-project' };
+    if (fields.security) return { quoted: false, reason: 'restricted-issue' };
+    if (source.type === 'jira_comment') {
+      const commentId = /^comment-(\d+)$/.exec(source.id ?? '')?.[1];
+      if (!commentId) return { quoted: false, reason: 'unchecked' };
+      const comment = await api.asUser().requestJira(route`/rest/api/3/issue/${sourceIssue}/comment/${commentId}`);
+      if (!comment.ok) return { quoted: false, reason: 'unchecked' };
+      if ((await comment.json())?.visibility) return { quoted: false, reason: 'restricted-comment' };
+    }
+    return { quoted: true, reason: 'same-project-open' };
+  } catch {
+    return { quoted: false, reason: 'unchecked' };
+  }
+}
+
+const SHARING_EXPLANATION = {
+  confluence: 'The decision comes from a Confluence page. The app cannot check that everyone who can see this Jira issue may also read that page, so the comment does not quote it, name it or link to it.',
+  'other-project': 'The decision comes from outside this Jira project, so the comment does not quote it, name it or link to it.',
+  'restricted-issue': 'The decision comes from an issue with a security level, so the comment does not quote it, name it or link to it.',
+  'restricted-comment': 'The decision comes from a comment with restricted visibility, so the comment does not quote it, name it or link to it.',
+  unchecked: 'The app could not check who can see the decision\'s source, so the comment does not quote it, name it or link to it.',
+  'same-project-open': 'The decision comes from this Jira project and is visible to everyone who can browse it, so the comment can quote it.'
+};
+
+/** Short fingerprint of the exact comment text, so what was previewed is what gets posted. */
+export const commentDigest = (text) => createHash('sha256').update(text).digest('hex').slice(0, 32);
+
+/**
+ * The exact comment for a finding and issue: quoted (the person's note, the quote, the source
+ * title and link) when sharing is established, otherwise the fixed generic follow-up, which
+ * ignores any note text the person or an agent supplied. Shared by the issue panel, the project
+ * page and Rovo confirmation.
+ */
+export async function composeNote({ candidate, projectKey, note, siteUrl, confirmedIn }) {
+  const sharing = await sourceSharing(candidate, projectKey);
+  const mode = sharing.quoted ? 'quoted' : 'generic';
+  const evidence = mode === 'quoted' ? noteEvidence(candidate, siteUrl) : { quote: null, sourceTitle: null, sourceUrl: null };
+  const noteText = mode === 'quoted' ? String(note ?? '').trim() : GENERIC_NOTE;
+  const { body, text } = noteComment({ mode, note: noteText, ...evidence, confirmedIn });
+  return {
+    mode,
+    reason: sharing.reason,
+    explanation: SHARING_EXPLANATION[sharing.reason],
+    note: noteText,
+    ...evidence,
+    body,
+    text,
+    digest: commentDigest(text)
+  };
 }
 
 const NOTE_PROPERTY = 'decision-drift-radar-note';
@@ -186,7 +261,7 @@ async function recoverNote(key, lockKey, issueKey, attempt) {
 }
 
 /** Shared Jira write. A reservation protects both posting paths until Jira's result is known. */
-export async function postNote({ projectKey, candidateId, issueKey, note, quote, sourceTitle, sourceUrl, siteUrl, confirmedIn }) {
+export async function postNote({ projectKey, candidateId, issueKey, body, confirmedIn }) {
   const key = noteKey(projectKey, candidateId, issueKey);
   const lockKey = `posting:${key}`;
   const existing = await storage.get(key);
@@ -217,13 +292,6 @@ export async function postNote({ projectKey, candidateId, issueKey, note, quote,
     return { ok: true, note: receipt, alreadyApplied: true };
   }
 
-  const body = noteCommentBody({
-    note,
-    quote,
-    sourceTitle: String(sourceTitle ?? '').trim().slice(0, MAX_TITLE_LENGTH),
-    sourceUrl: trustedSourceUrl(sourceUrl, siteUrl),
-    confirmedIn
-  });
   try {
     const response = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}/comment`, {
       method: 'POST',

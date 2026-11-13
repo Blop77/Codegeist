@@ -28,6 +28,9 @@ const pageText = [
   'Lena shared last quarter’s open rates. After the review, the team is going ahead with Tuesday-only sends for the email campaign.'
 ];
 const INDIRECT = 'After the review, the team is going ahead with Tuesday-only sends for the email campaign.';
+const COMMENT_DECISION = 'Decided in standup: email sends use the shared launch plan instead of separate channel plans.';
+/** Sharing checks on Jira sources: security levels and comment visibility. */
+const restricted = { issueSecurity: false, commentVisibility: false };
 
 g.__confluence = (_path: string, json: any) => json({
   results: [{
@@ -44,7 +47,10 @@ const rawIssues = mcIssues.map((issue, n) => ({
     summary: issue.title, status: { name: issue.status }, labels: issue.labels, updated: issue.updatedAt,
     project: { id: '10001', key: 'MC' },
     description: issue.key === 'MC-9' ? { type: 'doc', content: mc9Description.split('\n').map(P) } : null,
-    comment: { comments: [] }
+    comment: { comments: issue.key === 'MC-9' ? [{
+      id: '9001', author: { displayName: 'Priya' }, created: '2026-11-12T09:00:00.000+0000',
+      body: { type: 'doc', content: [P(COMMENT_DECISION)] }
+    }] : [] }
   }
 }));
 
@@ -70,8 +76,15 @@ g.__jira = (path: string, json: any, options: any) => {
       .find((entry) => entry.key === propertyPath[2]);
     return property ? json(property) : json({}, 404);
   }
+  const singleComment = /\/rest\/api\/3\/issue\/([^/?]+)\/comment\/(\d+)$/.exec(path);
+  if (singleComment) {
+    return json({ id: singleComment[2], ...(restricted.commentVisibility ? { visibility: { type: 'role', value: 'Developers' } } : {}) });
+  }
   const one = /\/rest\/api\/3\/issue\/([^?/]+)\?/.exec(path);
-  if (one) return json(rawIssues.find((r) => r.key === decodeURIComponent(one[1])));
+  if (one) {
+    const found = rawIssues.find((r) => r.key === decodeURIComponent(one[1]));
+    return json(found && restricted.issueSecurity ? { ...found, fields: { ...found.fields, security: { id: '1', name: 'Staff' } } } : found);
+  }
   return json({ issues: rawIssues });
 };
 
@@ -120,6 +133,38 @@ test('sample scan shows a Teamwork Graph finding and context', async () => {
   assert.ok(viaGraph[0].affectedIssues[0].reasons.some((r: string) => r.includes('international orders')));
   assert.ok(sample.pages.some((p: any) => p.via));
   assert.equal(sample.candidates.filter((c: any) => c.kind === 'decision').length, 5);
+});
+
+test('sample: the note preview reads only bundled data and never writes, posts or saves a review', async () => {
+  const sample = await handler.getSampleRadar({});
+  const fromPage = sample.candidates.find((c: any) => c.source.type === 'confluence_page' && c.affectedIssues.length > 0);
+  const fromComment = sample.candidates.find((c: any) => c.source.type === 'jira_comment' && c.affectedIssues.length > 0);
+  assert.ok(fromPage && fromComment);
+  const memoryBefore = JSON.stringify([...memory.entries()]);
+  const kvsBefore = JSON.stringify([...kvsMemory.entries()]);
+  const originalJira = g.__jira;
+  const originalConfluence = g.__confluence;
+  const touched: string[] = [];
+  g.__jira = (path: string, json: any, options: any) => { touched.push(path); return originalJira(path, json, options); };
+  g.__confluence = (path: string, json: any) => { touched.push(path); return originalConfluence(path, json); };
+  try {
+    const generic = await handler.previewSampleNote({ payload: { candidateId: fromPage.id, issueKey: fromPage.affectedIssues[0].issueKey } });
+    assert.equal(generic.ok, true);
+    assert.equal(generic.sample, true);
+    assert.equal(generic.mode, 'generic');
+    assert.ok(!generic.text.includes(fromPage.evidence.quote));
+    assert.match(generic.explanation, /^Sample only/);
+    const quoted = await handler.previewSampleNote({ payload: { candidateId: fromComment.id, issueKey: fromComment.affectedIssues[0].issueKey, note: 'Cap retries at 3.' } });
+    assert.equal(quoted.mode, 'quoted');
+    assert.ok(quoted.text.includes('Cap retries at 3.') && quoted.text.includes(fromComment.evidence.quote));
+    assert.equal((await handler.previewSampleNote({ payload: { candidateId: fromPage.id, issueKey: 'PAY-999' } })).ok, false);
+  } finally {
+    g.__jira = originalJira;
+    g.__confluence = originalConfluence;
+  }
+  assert.deepEqual(touched, [], 'no Jira or Confluence request');
+  assert.equal(JSON.stringify([...memory.entries()]), memoryBefore, 'no storage write');
+  assert.equal(JSON.stringify([...kvsMemory.entries()]), kvsBefore, 'no KVS write');
 });
 
 let aiFinding: any;
@@ -180,51 +225,123 @@ test('a saved AI finding disappears once its quote is no longer in the source', 
   g.__confluence = original;
 });
 
-test('AI note drafts keep a description change only when it quotes the issue exactly', async () => {
+/** Finds a finding in a fresh project scan, and the payload for a note about it. */
+async function findingFor(contains: string) {
   const scan = await handler.getProjectRadar({ payload: { projectKey: 'MC' }, context: ctx });
-  const shared = scan.candidates.find((c: any) => c.summary.includes('shared launch plan'));
+  const candidate = scan.candidates.find((c: any) => c.summary.includes(contains));
+  assert.ok(candidate, contains);
+  return candidate;
+}
+
+/** The exact comment preview, and the payload that posts it. */
+async function previewed(payload: Record<string, unknown>) {
+  const preview = await handler.previewDecisionNote({ payload, context: ctx });
+  assert.equal(preview.ok, true, preview.error);
+  return { preview, payload: { ...payload, digest: preview.digest } };
+}
+
+const COMMENT_SUMMARY = 'Email sends use the shared launch plan';
+const textOf = (body: any): string => JSON.stringify(body);
+
+test('AI note drafts keep a description change only when it quotes the issue exactly, and only for a quotable source', async () => {
+  const fromComment = await findingFor(COMMENT_SUMMARY);
   clearCooldowns();
   g.__chat = async () => ({ choices: [{ message: { content: JSON.stringify({
-    note: 'The team agreed on one shared launch plan on 4 November. This issue still plans email separately.',
+    note: 'The team agreed on one shared launch plan. This issue still plans email separately.',
     outdated: 'the email campaign keeps separate channel plans',
     replacement: 'the email campaign follows the shared launch plan'
   }) } }] });
-  const drafted = await handler.draftDecisionNote({ payload: { projectKey: 'MC', candidateId: shared.id, issueKey: 'MC-9' }, context: ctx });
-  assert.equal(drafted.ok, true);
+  const drafted = await handler.draftDecisionNote({ payload: { projectKey: 'MC', candidateId: fromComment.id, issueKey: 'MC-9' }, context: ctx });
+  assert.equal(drafted.ok, true, drafted.error);
   assert.ok(drafted.note.includes('Suggested change to the description: replace "the email campaign keeps separate channel plans"'));
 
   clearCooldowns();
   g.__chat = async () => ({ choices: [{ message: { content: JSON.stringify({
     note: 'A shared plan was agreed.', outdated: 'email runs on Mondays', replacement: 'email runs on Tuesdays'
   }) } }] });
-  const invented = await handler.draftDecisionNote({ payload: { projectKey: 'MC', candidateId: shared.id, issueKey: 'MC-9' }, context: ctx });
+  const invented = await handler.draftDecisionNote({ payload: { projectKey: 'MC', candidateId: fromComment.id, issueKey: 'MC-9' }, context: ctx });
   assert.equal(invented.ok, true);
   assert.equal(invented.suggestion, null);
   assert.ok(!invented.note.includes('Suggested change'));
+
+  // A Confluence source cannot be quoted, so there is nothing for the AI to draft.
+  const fromPage = await findingFor('shared launch plan instead of separate channel plans for the MC');
+  const calls = g.__llmCalls.length;
+  const refused = await handler.draftDecisionNote({ payload: { projectKey: 'MC', candidateId: fromPage.id, issueKey: 'MC-9' }, context: ctx });
+  assert.equal(refused.ok, false);
+  assert.match(refused.error, /cannot be quoted/);
+  assert.equal(g.__llmCalls.length, calls, 'no model call');
 });
 
-test('the app still requires a relevant review before posting', async () => {
-  const scan = await handler.getProjectRadar({ payload: { projectKey: 'MC' }, context: ctx });
-  const docs = scan.candidates.find((c: any) => c.summary.includes('Product documentation'));
-  const payload = { projectKey: 'MC', candidateId: docs.id, issueKey: 'MC-8', note: 'Check scope.', quote: docs.evidence.quote, sourceTitle: 'Client-supplied title', sourceUrl: `${SITE}/wiki/x` };
-  const refused = await handler.applyDecisionNote({ payload, context: ctx });
-  assert.equal(refused.ok, false);
-  assert.equal(comments.length, 0);
+test('a Confluence source gets the generic follow-up: no quote, title, link or free text, on the exact previewed comment', async () => {
+  const docs = await findingFor('Product documentation');
+  const base = { projectKey: 'MC', candidateId: docs.id, issueKey: 'MC-8', note: `Check scope. ${docs.evidence.quote} See MC launch sync: decisions.` };
+  const before = comments.length;
+  assert.equal((await handler.applyDecisionNote({ payload: base, context: ctx })).ok, false, 'needs a relevant review');
   await handler.reviewDecision({ payload: { projectKey: 'MC', candidateId: docs.id, choice: 'relevant' }, context: ctx });
-  const wrongIssue = await handler.applyDecisionNote({ payload: { ...payload, issueKey: 'MC-61' }, context: ctx });
-  assert.equal(wrongIssue.ok, false);
-  const oldQuote = await handler.applyDecisionNote({ payload: { ...payload, quote: 'Older wording.' }, context: ctx });
-  assert.equal(oldQuote.ok, false);
-  assert.equal(comments.length, 0);
+  assert.equal((await handler.applyDecisionNote({ payload: { ...base, issueKey: 'MC-61' }, context: ctx })).ok, false);
+
+  const { preview, payload } = await previewed(base);
+  assert.equal(preview.mode, 'generic');
+  assert.match(preview.explanation, /Confluence page/);
+  for (const leaked of [docs.evidence.quote, 'MC launch sync', '/wiki/', 'Check scope']) {
+    assert.ok(!preview.text.includes(leaked), `preview must not contain ${leaked}`);
+  }
+  const stale = await handler.applyDecisionNote({ payload: { ...payload, digest: 'not-the-preview' }, context: ctx });
+  assert.equal(stale.ok, false);
+  assert.match(stale.error, /changed since you previewed/);
+  assert.equal(comments.length, before);
 
   const posted = await handler.applyDecisionNote({ payload, context: ctx });
-  assert.equal(posted.ok, true);
-  assert.equal(comments.length, 1);
-  assert.match(comments[0].body.content[0].content[1].text, /reviewed by a teammate/);
-  const source = comments[0].body.content.at(-1).content[1];
-  assert.equal(source.text, 'MC launch sync: decisions');
-  assert.equal(source.marks[0].attrs.href, `${SITE}/wiki/spaces/MAR/pages/777`);
+  assert.equal(posted.ok, true, posted.error);
+  const comment = comments.at(-1)!;
+  assert.equal(comments.length, before + 1);
+  assert.match(comment.body.content[0].content[1].text, /reviewed by a teammate/);
+  for (const leaked of [docs.evidence.quote, 'MC launch sync', '/wiki/', 'Check scope', 'Product documentation']) {
+    assert.ok(!textOf(comment.body).includes(leaked), `posted comment must not contain ${leaked}`);
+  }
+  assert.ok(textOf(comment.body).includes('Its source may not be visible to everyone'));
 });
+
+test('a same-project Jira comment can be quoted, with the person\'s note, unless the source is restricted', async () => {
+  const fromComment = await findingFor(COMMENT_SUMMARY);
+  await handler.reviewDecision({ payload: { projectKey: 'MC', candidateId: fromComment.id, choice: 'relevant', issueKey: 'MC-9' }, context: ctx });
+  const base = { projectKey: 'MC', candidateId: fromComment.id, issueKey: 'MC-9', note: 'Please follow the shared plan for email.' };
+
+  for (const flag of ['issueSecurity', 'commentVisibility'] as const) {
+    restricted[flag] = true;
+    try {
+      const { preview } = await previewed(base);
+      assert.equal(preview.mode, 'generic', `${flag} prevents quoting`);
+      assert.ok(!preview.text.includes(COMMENT_DECISION));
+    } finally {
+      restricted[flag] = false;
+    }
+  }
+
+  const { preview, payload } = await previewed(base);
+  assert.equal(preview.mode, 'quoted');
+  assert.ok(preview.text.includes('Please follow the shared plan for email.'));
+  assert.ok(preview.text.includes(COMMENT_DECISION));
+  // The source became restricted between preview and posting: nothing is posted.
+  restricted.commentVisibility = true;
+  const before = comments.length;
+  try {
+    const refused = await handler.applyDecisionNote({ payload, context: ctx });
+    assert.equal(refused.ok, false);
+    assert.equal(refused.preview.mode, 'generic');
+    assert.equal(comments.length, before);
+  } finally {
+    restricted.commentVisibility = false;
+  }
+  const posted = await handler.applyDecisionNote({ payload, context: ctx });
+  assert.equal(posted.ok, true, posted.error);
+  const body = textOf(comments.at(-1)!.body);
+  assert.ok(body.includes('Please follow the shared plan for email.'));
+  assert.ok(body.includes(COMMENT_DECISION));
+  assert.ok(body.includes('focusedCommentId=9001'));
+});
+
 
 test('reviewing requires a currently visible finding', async () => {
   const payload = { projectKey: 'MC', candidateId: 'dc_0000000000000000', choice: 'relevant' };
@@ -252,37 +369,58 @@ async function prepareFromRovo(issueKey: string, contains: string, note?: string
 }
 
 const loadDraft = (issueKey: string, context = ctx) => handler.getRovoDraft({ payload: { issueKey }, context });
-const postDraft = (issueKey: string, draftId: string, context = ctx) =>
-  handler.postRovoDraft({ payload: { issueKey, draftId }, context });
+const postDraft = (issueKey: string, draft: { id: string; digest: string }, context = ctx) =>
+  handler.postRovoDraft({ payload: { issueKey, draftId: draft.id, digest: draft.digest }, context });
 
 test('Rovo prepares a private draft and Jira posts the exact preview only for its owner', async () => {
   const issueKey = 'MC-9';
   const note = 'Follow the shared campaign plan.';
-  const prepared = await prepareFromRovo(issueKey, 'shared launch plan', note);
+  // The shared-plan decision is on a Confluence page: the draft becomes the generic follow-up.
+  const prepared = await prepareFromRovo(issueKey, 'shared launch plan instead of separate channel plans for the MC', note);
   assert.equal(prepared.ok, true);
   assert.equal(prepared.issueLink, `${SITE}/browse/${issueKey}`);
+  assert.match(prepared.nextStep, /does not quote it, name it or link to it/);
   assert.equal('postDecisionNote' in actions, false, 'Rovo cannot invoke the Jira write');
-  assert.equal(comments.filter((comment) => comment.issueKey === issueKey).length, 0);
+  const before = comments.filter((comment) => comment.issueKey === issueKey).length;
 
   const { draft } = await loadDraft(issueKey);
   assert.ok(draft);
-  assert.equal(draft.note, note);
-  assert.equal(draft.sourceUrl, `${SITE}/wiki/spaces/MAR/pages/777`);
+  assert.equal(draft.mode, 'generic');
+  assert.ok(!draft.text.includes(note), 'the agent\'s note is not carried into a generic follow-up');
+  assert.ok(!draft.text.includes('/wiki/'));
   const stranger = { ...ctx, accountId: 'acc-2' };
   assert.equal((await loadDraft(issueKey, stranger)).draft, null);
-  assert.equal((await postDraft(issueKey, draft.id, stranger)).ok, false);
-  assert.equal((await postDraft('MC-8', draft.id)).ok, false);
+  assert.equal((await postDraft(issueKey, draft, stranger)).ok, false);
+  assert.equal((await postDraft('MC-8', draft)).ok, false);
+  assert.equal((await postDraft(issueKey, { ...draft, digest: 'other' })).ok, false, 'only the previewed comment can be posted');
 
-  const posted = await postDraft(issueKey, draft.id);
-  assert.equal(posted.ok, true);
+  const posted = await postDraft(issueKey, draft);
+  assert.equal(posted.ok, true, posted.error);
   assert.ok(posted.note.commentId);
-  const [comment] = comments.filter((entry) => entry.issueKey === issueKey);
+  const comment = comments.at(-1)!;
   assert.match(comment.body.content[0].content[1].text, /approved in the Jira issue panel/);
-  assert.equal(comment.body.content[1].content[0].text, note);
-  assert.equal(comment.body.content.at(-1).content[1].marks[0].attrs.href, draft.sourceUrl);
+  assert.ok(!textOf(comment.body).includes(note));
+  assert.ok(!textOf(comment.body).includes('MC launch sync'));
   assert.equal(memory.get(`review:MC:${posted.candidateId}`).status, 'relevant');
-  assert.equal((await postDraft(issueKey, draft.id)).ok, false);
-  assert.equal(comments.filter((entry) => entry.issueKey === issueKey).length, 1);
+  assert.equal((await postDraft(issueKey, draft)).ok, false);
+  assert.equal(comments.filter((entry) => entry.issueKey === issueKey).length, before + 1);
+});
+
+test('Rovo: a quotable Jira source posts the agent\'s note and quote after confirmation', async () => {
+  const issueKey = 'MC-9';
+  const note = 'Email should follow the shared launch plan.';
+  // An earlier test posted this finding's manual note; start from a clean receipt.
+  for (const key of [...memory.keys()]) if (key.startsWith('note:MC:') && key.endsWith(':MC-9')) memory.delete(key);
+  const prepared = await prepareFromRovo(issueKey, COMMENT_SUMMARY, note);
+  assert.equal(prepared.ok, true, prepared.error);
+  const { draft } = await loadDraft(issueKey);
+  assert.equal(draft.mode, 'quoted');
+  assert.ok(draft.text.includes(note));
+  assert.ok(draft.text.includes(COMMENT_DECISION));
+  const posted = await postDraft(issueKey, draft);
+  assert.equal(posted.ok, true, posted.error);
+  const body = textOf(comments.at(-1)!.body);
+  assert.ok(body.includes(note) && body.includes(COMMENT_DECISION));
 });
 
 test('an old preview cannot post a replaced or expired draft', async () => {
@@ -291,11 +429,11 @@ test('an old preview cannot post a replaced or expired draft', async () => {
   const first = (await loadDraft(issueKey)).draft;
   assert.equal((await prepareFromRovo(issueKey, 'shared launch plan', 'Second draft.')).ok, true);
   const second = (await loadDraft(issueKey)).draft;
-  assert.equal((await postDraft(issueKey, first.id)).ok, false);
+  assert.equal((await postDraft(issueKey, first)).ok, false);
   const key = [...kvsMemory.keys()].find((key) => key.startsWith('rovo-draft:') && key.endsWith(`:${issueKey}`))!;
   kvsMemory.get(key).expiresAt = Date.now() - 1;
   assert.equal((await loadDraft(issueKey)).ok, false);
-  assert.equal((await postDraft(issueKey, second.id)).ok, false);
+  assert.equal((await postDraft(issueKey, second)).ok, false);
 });
 
 test('Jira refuses a draft when source access is revoked after preview', async () => {
@@ -307,7 +445,7 @@ test('Jira refuses a draft when source access is revoked after preview', async (
   try {
     g.__confluence = (_path: string, json: any) => json({}, 403);
     assert.equal((await loadDraft(issueKey)).ok, false);
-    const result = await postDraft(issueKey, draft.id);
+    const result = await postDraft(issueKey, draft);
     assert.equal(result.ok, false);
     assert.equal(comments.length, count);
   } finally {
@@ -323,7 +461,7 @@ test('Jira requires a fresh Rovo preview after an issue edit or dismissal', asyn
   const count = comments.length;
   try {
     issue.fields.updated = '2026-11-14T00:00:00Z';
-    const result = await postDraft(issue.key, draft.id);
+    const result = await postDraft(issue.key, draft);
     assert.equal(result.ok, false);
     assert.match(result.error, /changed after the draft/);
   } finally {
@@ -332,7 +470,7 @@ test('Jira requires a fresh Rovo preview after an issue edit or dismissal', asyn
   const found = await actions.findIssueDecisions(rovo({ issueKey: issue.key }));
   const shared = found.findings.find((f: any) => f.statement.includes('shared launch plan'));
   await handler.reviewDecision({ payload: { projectKey: 'MC', candidateId: shared.findingId, choice: 'dismissed' }, context: ctx });
-  assert.equal((await postDraft(issue.key, draft.id)).ok, false);
+  assert.equal((await postDraft(issue.key, draft)).ok, false);
   assert.equal(comments.length, count);
 });
 
@@ -343,7 +481,7 @@ test('simultaneous Jira and Rovo confirmations can create only one comment', asy
   await handler.reviewDecision({ payload: { projectKey: 'MC', candidateId: shared.findingId, choice: 'relevant' }, context: ctx });
   assert.equal((await prepareFromRovo(issueKey, 'shared launch plan', 'One note.')).ok, true);
   const { draft } = await loadDraft(issueKey);
-  const payload = { projectKey: 'MC', candidateId: shared.findingId, issueKey, note: 'One note.', quote: shared.quote };
+  const { payload } = await previewed({ projectKey: 'MC', candidateId: shared.findingId, issueKey, note: 'One note.' });
   const originalJira = g.__jira;
   const firstStarted = Promise.withResolvers<void>();
   const letFirstFinish = Promise.withResolvers<void>();
@@ -358,7 +496,7 @@ test('simultaneous Jira and Rovo confirmations can create only one comment', asy
     }
     return originalJira(path, json, options);
   };
-  const first = postDraft(issueKey, draft.id);
+  const first = postDraft(issueKey, draft);
   try {
     await firstStarted.promise;
     const second = await handler.applyDecisionNote({ payload, context: ctx });
@@ -378,7 +516,7 @@ test('a missing receipt is recovered without a second Jira comment', async () =>
   const found = await actions.findIssueDecisions(rovo({ issueKey }));
   const shared = found.findings.find((f: any) => f.statement.includes('shared launch plan'));
   await handler.reviewDecision({ payload: { projectKey: 'MC', candidateId: shared.findingId, choice: 'relevant' }, context: ctx });
-  const payload = { projectKey: 'MC', candidateId: shared.findingId, issueKey, note: 'Keep the shared plan.', quote: shared.quote };
+  const { payload } = await previewed({ projectKey: 'MC', candidateId: shared.findingId, issueKey, note: 'Keep the shared plan.' });
   const receiptKey = `note:MC:${shared.findingId}:${issueKey}`;
   const set = storage.set;
   try {
@@ -404,7 +542,7 @@ test('an unconfirmed Jira response can be retried after a complete recovery chec
   const found = await actions.findIssueDecisions(rovo({ issueKey }));
   const shared = found.findings.find((f: any) => f.statement.includes('shared launch plan'));
   await handler.reviewDecision({ payload: { projectKey: 'MC', candidateId: shared.findingId, choice: 'relevant' }, context: ctx });
-  const payload = { projectKey: 'MC', candidateId: shared.findingId, issueKey, note: 'Use the shared plan.', quote: shared.quote };
+  const { payload } = await previewed({ projectKey: 'MC', candidateId: shared.findingId, issueKey, note: 'Use the shared plan.' });
   const lockKey = `posting:note:MC:${shared.findingId}:${issueKey}`;
   const originalJira = g.__jira;
   let attempts = 0;

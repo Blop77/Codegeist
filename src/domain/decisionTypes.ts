@@ -139,6 +139,11 @@ export interface SentenceContext {
   underDecisionHeading: boolean;
   /** True when the sentence is a list item under a heading that only names decisions ("Decisions", "Decision log", "Agreed"). */
   decisionListItem?: boolean;
+  /**
+   * True when the sentence is a question that ends a speaker's transcript line and the next
+   * line is from a different speaker, so the question was most likely answered straight away.
+   */
+  answeredByReply?: boolean;
 }
 
 /**

@@ -35,15 +35,23 @@ Scans and reviews do not write to Jira. `reviewDecision` and `clearDecisionRevie
 
 ## Posting a reviewed note (the only Jira write)
 
-`applyDecisionNote({ projectKey, candidateId, issueKey, note, quote, sourceTitle, sourceUrl })` posts one comment on `issueKey` with `asUser()`, so Jira applies the user's own comment permission and shows them as the author.
+`previewDecisionNote({ projectKey, candidateId, issueKey, note })` builds the exact comment on the server with the person's access and returns `{ ok, mode, text, digest, explanation, note }`. `composeNote` in `src/resolvers/notes.js` decides `mode` with `sourceSharing`:
+
+- `quoted` only when the finding's source is a Jira issue or comment in the same project whose issue has no security level and, for a comment, no `visibility` restriction (checked with `GET /rest/api/3/issue/{key}?fields=security,project` and `GET /rest/api/3/issue/{key}/comment/{id}`). Everyone who can see the target issue can browse the project, so they can read that source. The comment carries the person's note, the quote and the source title and link.
+- `generic` otherwise, including every Confluence page and any check that fails. The comment is the fixed `GENERIC_NOTE` in `src/resolvers/normalize.js`; any supplied note (typed, AI-drafted or from Rovo) is discarded, and no quote, title or link is included.
+
+`applyDecisionNote({ projectKey, candidateId, issueKey, note, digest })` posts one comment on `issueKey` with `asUser()`, so Jira applies the user's own comment permission and shows them as the author.
 
 - Requires the finding's stored review to be `relevant`; otherwise nothing is posted.
-- `issueKey` must belong to `projectKey`. `note` is 1 to 2,000 characters and `quote` at most 320.
-- `sourceUrl` is linked only if it is an `https` link to `/wiki/…` or `/browse/…` on this site; otherwise the source title is plain text.
-- Idempotency and audit: after Jira accepts the comment, `note:<KEY>:<candidateId>:<issueKey>` stores `{ issueKey, commentId, appliedAt }`. A repeat call returns that record with `alreadyApplied: true` and posts nothing. If the comment is posted but the record cannot be saved, the response is `ok: true` with a `warning`.
+- Rebuilds the comment and posts only if its `digest` (SHA-256 of the exact preview text) equals the one the person confirmed. Otherwise it returns `ok: false` with the new `preview` and posts nothing.
+- `issueKey` must belong to `projectKey`. In `quoted` mode `note` is 1 to 2,000 characters.
+- Idempotency and audit: after Jira accepts the comment, `note:<KEY>:<candidateId>:<issueKey>` stores `{ issueKey, commentId, appliedAt }`. A repeat call returns that record with `alreadyApplied: true` and posts nothing. A `note-reservation` entity record and a comment property let a retry recover a missing receipt without a second comment.
 - Returns `{ ok: true, note }` or `{ ok: false, error }`; every failure message says whether anything was posted.
-- Scans return each candidate's posted notes as `notes: { [issueKey]: { issueKey, commentId, appliedAt } }`.
 - The comment starts with "Decision Drift Radar note". Scans skip comments that start with that marker, so a posted note is not reported as a new decision.
+
+`draftDecisionNote` refuses sources in `generic` mode, since there is no note to draft. Rovo drafts (`prepare-decision-note`) go through the same `composeNote`; the draft stores the mode and digest, `getRovoDraft` returns the exact `text` and `digest`, and `postRovoDraft({ issueKey, draftId, digest })` rebuilds the comment and posts only if it still matches.
+
+`previewSampleNote({ candidateId, issueKey, note })` returns the same preview for a bundled sample finding (a sample Jira comment is `quoted`, a sample Confluence page `generic`). It makes no product or storage calls, saves no review and cannot post.
 
 `getSampleRadar()` returns the same shape as `getProjectRadar` with `sample: true`, built from `src/resolvers/sample-data.js`. It makes no product or storage calls; its links are empty, and the UI offers no review or note actions for it.
 
@@ -60,7 +68,7 @@ All run as the person in the chat (`asUser()`). When the input names no key, the
 
 ## Teamwork Graph
 
-`scanProject` and `scanIssue` call `discoverViaGraph` (`src/resolvers/graph.js`) with the project id (from an issue's `project` field, or from the project itself when it has no issues) and `context.cloudId`. As the user, via `requestTeamworkGraph`, it reads `atlassianTeamsBySpace` for `ari:cloud:jira:<cloudId>:project/<projectId>` (up to 5 teams), `spacesByAtlassianTeam` for each (up to 8 Confluence spaces), searches those spaces for decision wording (up to 10 pages), and reads `confluencePageLinkedConfluencePages` from up to 5 decision pages (up to 10 linked pages). New pages become `confluence_page` sources with `via` set (for example "Teamwork Graph: a Confluence space of team Brand, linked to MC"); `via` is passed through to candidates. Responses include `graph: { used, teams, spaces, pagesAdded, linkedPagesAdded, note }`. Any error, empty result or missing id leaves the scan as it would be without the graph, with a `note`. Twelve seconds after a scan starts, no new Graph lookup starts and failed ones are not retried, so the scan stays within Forge's 25-second limit; the `note` then says the lookups stopped early. Scopes: `read:graph:project:jira`, `read:graph:team:atlassian`, `read:graph:space:confluence`, `read:graph:page:confluence` (a major version). The API is in Preview.
+`scanProject` and `scanIssue` call `discoverViaGraph` (`src/resolvers/graph.js`) with the project id (from an issue's `project` field, or from the project itself when it has no issues) and `context.cloudId`. As the user, via `requestTeamworkGraph`, it reads `atlassianTeamsBySpace` for `ari:cloud:jira:<cloudId>:project/<projectId>` (up to 5 teams), `spacesByAtlassianTeam` for each (up to 8 Confluence spaces), searches those spaces for decision wording (up to 10 pages), and reads `confluencePageLinkedConfluencePages` from up to 5 decision pages (up to 10 linked pages). New pages become `confluence_page` sources with `via` set (for example "Teamwork Graph: a Confluence space of team Brand, linked to MC"); `via` is passed through to candidates. Responses include `graph: { used, teams, spaces, pagesAdded, linkedPagesAdded, note }`. Any error, empty result or missing id leaves the scan as it would be without the graph, with a `note`. `graph.status` also has `overall`: `ok`, `no_team` (Graph answered well-formed empty on every attempt; link a team), `unavailable` (errors or no usable team answer; scan again in a minute) or `partial` (a later stage or some origins failed, or lookups stopped early; earlier pages are kept); `notes` holds one sentence per problem and `note` joins them. The team lookup gets one extra, longer-spaced attempt when no attempt was conclusive; linked-page lookups that error or come back partial are retried within the deadline. Diagnostic logs carry only stage, HTTP status or error code, and attempt count, never page text, titles, names or GraphQL messages. Twelve seconds after a scan starts, no new Graph lookup starts and failed ones are not retried, so the scan stays within Forge's 25-second limit; the `note` then says the lookups stopped early. Scopes: `read:graph:project:jira`, `read:graph:team:atlassian`, `read:graph:space:confluence`, `read:graph:page:confluence` (a major version). The API is in Preview.
 
 ## AI pass
 

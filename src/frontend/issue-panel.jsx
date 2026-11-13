@@ -11,7 +11,7 @@ import ForgeReconciler, {
   useProductContext
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
-import { CandidateCard, draftPayload, notePayload, siteLink, withNote } from './candidate-card';
+import { CandidateCard, CommentPreview, draftPayload, notePayload, siteLink, withNote } from './candidate-card';
 
 function IssuePanel() {
   const context = useProductContext();
@@ -73,9 +73,17 @@ function IssuePanel() {
     }
   };
 
-  const applyNote = async (candidate, noteIssueKey, note) => {
+  const previewNote = async (candidate, noteIssueKey, note) => {
     try {
-      const response = await invoke('applyDecisionNote', notePayload(candidate, noteIssueKey, note));
+      return await invoke('previewDecisionNote', notePayload(candidate, noteIssueKey, note));
+    } catch {
+      return { ok: false, error: 'Could not prepare the comment preview. Try again.' };
+    }
+  };
+
+  const applyNote = async (candidate, noteIssueKey, note, digest) => {
+    try {
+      const response = await invoke('applyDecisionNote', notePayload(candidate, noteIssueKey, note, digest));
       if (response?.ok) setResult((current) => withNote(current, candidate.id, noteIssueKey, response.note));
       return response;
     } catch {
@@ -103,7 +111,7 @@ function IssuePanel() {
     setDraftBusy(true);
     setDraftMessage(null);
     try {
-      const response = await invoke('postRovoDraft', { issueKey, draftId: draft.id });
+      const response = await invoke('postRovoDraft', { issueKey, draftId: draft.id, digest: draft.digest });
       if (response?.ok) {
         setDraft(null);
         setDraftReceipt(response.note);
@@ -142,12 +150,7 @@ function IssuePanel() {
           {draftReceipt && <Text>Note added to {issueKey}.{draftComment && <> <Link href={draftComment}>View comment</Link></>}</Text>}
           {draft && (
             <Stack space="space.075">
-              <Heading size="small">Comment preview</Heading>
-              <Text>Decision Drift Radar note · drafted with the Rovo agent and approved in the Jira issue panel</Text>
-              {draft.note.split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line, index) => <Text key={index}>{line}</Text>)}
-              <Text>“{draft.quote}”</Text>
-              <Text>Source: {draft.sourceUrl ? <Link href={draft.sourceUrl}>{draft.sourceTitle}</Link> : draft.sourceTitle}</Text>
-              <Text>Jira viewers may have different access to the source. Check that the note and quote are safe to share.</Text>
+              <CommentPreview preview={draft} title="Rovo draft: exactly what will be posted" />
               <Inline>
                 <Button appearance="primary" onClick={postDraft} isDisabled={draftBusy}>{`Post Rovo draft to ${issueKey}`}</Button>
               </Inline>
@@ -166,7 +169,8 @@ function IssuePanel() {
           hideIssueKeys
           onReview={(choice) => reviewCandidate(candidate, choice)}
           reviewBusy={reviewBusyId === candidate.id}
-          onApplyNote={(noteIssueKey, note) => applyNote(candidate, noteIssueKey, note)}
+          onApplyNote={(noteIssueKey, note, digest) => applyNote(candidate, noteIssueKey, note, digest)}
+          onPreviewNote={(noteIssueKey, note) => previewNote(candidate, noteIssueKey, note)}
           onDraftNote={async (noteIssueKey) => {
             try {
               return await invoke('draftDecisionNote', draftPayload(candidate, noteIssueKey));

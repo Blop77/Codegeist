@@ -2,3 +2,4 @@
 benchmark/corpus/** -whitespace
 benchmark/heldout/** -whitespace
 benchmark/recall/** -whitespace
+benchmark/fresh/** -whitespace

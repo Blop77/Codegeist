@@ -41,14 +41,17 @@ function sourceVia(source) {
 
 export const MAX_NOTE_LENGTH = 2000;
 
-/** Payload for the note resolver. The quote identifies the evidence the reviewer saw. */
-export function notePayload(candidate, issueKey, note) {
+/**
+ * Payload for the preview and note resolvers. `digest` identifies the exact comment preview the
+ * person confirmed; the server posts only if its rebuilt comment still matches it.
+ */
+export function notePayload(candidate, issueKey, note, digest) {
   return {
     projectKey: candidate.source.projectKey,
     candidateId: candidate.id,
     issueKey,
     note,
-    quote: candidate.evidence.quote
+    ...(digest ? { digest } : {})
   };
 }
 
@@ -74,12 +77,27 @@ export function defaultNote(candidate) {
   return `${label} recorded in a ${where} may affect this issue: ${candidate.summary}\nPlease check whether this issue needs updating.`;
 }
 
+/** The exact comment text, line by line, as the server built it. */
+export function CommentPreview({ preview, title = 'Comment preview: exactly what will be posted' }) {
+  return (
+    <SectionMessage appearance={preview.mode === 'quoted' ? 'information' : 'warning'} title={title}>
+      <Stack space="space.050">
+        {preview.explanation && <Text><Em>{preview.explanation}</Em></Text>}
+        {preview.text.split('\n').map((line, index) => <Text key={index}>{index === 0 ? <Strong>{line}</Strong> : line}</Text>)}
+      </Stack>
+    </SectionMessage>
+  );
+}
+
 /**
- * Review, edit and confirm one note before it is posted as a Jira comment. Nothing is sent
- * until "Post comment" is selected.
+ * Review and confirm one comment before it is posted. The server builds the exact comment; nothing
+ * is sent until "Post" is selected on that preview. When the source cannot be quoted to the
+ * issue's audience, the comment is a fixed follow-up and there is no note to edit. In the sample,
+ * the preview is built from bundled data and nothing can be posted.
  */
-function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onDraftNote }) {
+function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onPreviewNote, onDraftNote, sample = false }) {
   const [draft, setDraft] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [message, setMessage] = useState(null);
@@ -98,12 +116,26 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onDraftNote }) 
       </Stack>
     );
   }
+
+  const showPreview = async (note) => {
+    setBusy(true);
+    setMessage(null);
+    const result = await onPreviewNote(issueKey, note);
+    setBusy(false);
+    if (result?.ok) setPreview(result);
+    else setMessage(result?.error ?? 'Could not prepare the comment preview. Try again.');
+  };
+
   if (draft === null) {
     return (
       <Stack space="space.050">
         <Inline>
-          <Button appearance="default" onClick={() => { setMessage(null); setDraft(defaultNote(candidate)); }}>
-            Add note to {issueKey}
+          <Button appearance="default" isDisabled={busy} onClick={async () => {
+            const note = defaultNote(candidate);
+            setDraft(note);
+            await showPreview(note);
+          }}>
+            {sample ? `Preview a note for ${issueKey}` : `Add note to ${issueKey}`}
           </Button>
         </Inline>
         {message && <SectionMessage appearance="error">{message}</SectionMessage>}
@@ -112,6 +144,8 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onDraftNote }) 
   }
 
   const trimmed = draft.trim();
+  const generic = preview?.mode === 'generic';
+  const current = preview && (generic || preview.note === trimmed);
   const draftWithAi = async () => {
     setDrafting(true);
     setMessage(null);
@@ -120,9 +154,10 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onDraftNote }) 
     setDrafting(false);
     if (result?.ok) {
       setDraft(result.note);
+      setPreview(null);
       setDraftInfo(result.suggestion
-        ? 'Drafted by AI. The suggested description change quotes the issue word for word. Check the note before posting.'
-        : 'Drafted by AI from the finding and the issue. Check the note before posting.');
+        ? 'Drafted by AI. The suggested description change quotes the issue word for word. Check the note, then preview the comment.'
+        : 'Drafted by AI from the finding and the issue. Check the note, then preview the comment.');
     } else {
       setMessage(result?.error ?? 'The AI could not draft a note. You can still write it yourself.');
     }
@@ -130,48 +165,71 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onDraftNote }) 
   const post = async () => {
     setBusy(true);
     setMessage(null);
-    const result = await onApplyNote(issueKey, trimmed);
+    const result = await onApplyNote(issueKey, generic ? '' : trimmed, preview.digest);
     setBusy(false);
     if (result?.ok) {
       setDraft(null);
+      setPreview(null);
       setMessage(result.warning ?? null);
     } else {
+      if (result?.preview) setPreview(result.preview);
       setMessage(result?.error ?? 'Could not add the note. Try again.');
     }
   };
+  const cancel = () => { setDraft(null); setPreview(null); setMessage(null); setDraftInfo(null); };
 
   return (
     <Stack space="space.075">
-      <Text>
-        This posts one comment on {issueKey} in your name, with the note below, the quote and a link to the source.
-        People who can see this Jira comment may have different access to the source. Check that the note and quote are safe to share.
-      </Text>
-      <TextArea
-        name={`note-${candidate.id}-${issueKey}`}
-        value={draft}
-        minimumRows={6}
-        resize="vertical"
-        onChange={(event) => setDraft(event.target.value)}
-        isDisabled={busy || drafting}
-      />
-      {draftInfo && <Text><Em>{draftInfo}</Em></Text>}
-      {trimmed.length > MAX_NOTE_LENGTH && <Text>The note is too long ({trimmed.length} of {MAX_NOTE_LENGTH} characters).</Text>}
+      {sample && (
+        <SectionMessage appearance="information" title="Sample only">
+          This shows what a teammate would see before posting. Nothing is saved, and nothing is posted to Jira.
+        </SectionMessage>
+      )}
+      {!generic && (
+        <>
+          <Text>Edit the note, then preview the exact comment. It is posted on {issueKey} in your name.</Text>
+          <TextArea
+            name={`note-${candidate.id}-${issueKey}`}
+            value={draft}
+            minimumRows={5}
+            resize="vertical"
+            onChange={(event) => setDraft(event.target.value)}
+            isDisabled={busy || drafting}
+          />
+          {draftInfo && <Text><Em>{draftInfo}</Em></Text>}
+          {trimmed.length > MAX_NOTE_LENGTH && <Text>The note is too long ({trimmed.length} of {MAX_NOTE_LENGTH} characters).</Text>}
+        </>
+      )}
+      {preview && current && <CommentPreview preview={preview} />}
       {message && <SectionMessage appearance="error">{message}</SectionMessage>}
       <Inline space="space.100">
-        <Button appearance="primary" isDisabled={busy || drafting || !trimmed || trimmed.length > MAX_NOTE_LENGTH} onClick={post}>
-          {busy ? 'Posting…' : `Post comment to ${issueKey}`}
-        </Button>
-        {onDraftNote && (
+        {!generic && !current && (
+          <Button appearance="primary" isDisabled={busy || drafting || !trimmed || trimmed.length > MAX_NOTE_LENGTH} onClick={() => showPreview(trimmed)}>
+            {busy ? 'Preparing…' : 'Preview comment'}
+          </Button>
+        )}
+        {current && !sample && (
+          <Button appearance="primary" isDisabled={busy || drafting} onClick={post}>
+            {busy ? 'Posting…' : generic ? `Post follow-up to ${issueKey}` : `Post comment to ${issueKey}`}
+          </Button>
+        )}
+        {onDraftNote && !generic && !sample && (
           <Button appearance="default" isDisabled={busy || drafting} onClick={draftWithAi}>
             {drafting ? 'Drafting…' : 'Draft with AI'}
           </Button>
         )}
-        <Button appearance="subtle" isDisabled={busy || drafting} onClick={() => { setDraft(null); setMessage(null); setDraftInfo(null); }}>
-          Cancel
-        </Button>
+        <Button appearance="subtle" isDisabled={busy || drafting} onClick={cancel}>{sample ? 'Close preview' : 'Cancel'}</Button>
       </Inline>
     </Stack>
   );
+}
+
+/** How strongly an issue is tied to the finding, in words, from the matcher's score. */
+export function matchStrength(affected) {
+  if (affected.wordingStatus === 'outdated') return 'Strong match: still uses the replaced wording';
+  if (affected.relevance >= 0.75) return 'Strong match';
+  if (affected.relevance >= 0.45) return 'Possible match';
+  return 'Weak match';
 }
 
 /**
@@ -200,11 +258,17 @@ function DriftLine({ drift }) {
   return <Text><Em>Drifting since {shortDate(drift.firstSeenAt)}: the issue still says “{drift.phrase}”.</Em></Text>;
 }
 
-export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false, onApplyNote, onDraftNote, sample = false }) {
+export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false, onApplyNote, onPreviewNote, onDraftNote, sample = false }) {
   const kind = KIND_LABEL[candidate.kind] ?? KIND_LABEL.proposal;
   const { source } = candidate;
   const sourceHref = siteLink(siteUrl, source.url);
-  const canNote = Boolean(onApplyNote) && candidate.review?.status === 'relevant';
+  // Sample reviews live only in this page's memory: they are never saved.
+  const [sampleReview, setSampleReview] = useState(null);
+  const review = sample ? sampleReview : candidate.review;
+  const canNote = (sample ? Boolean(onPreviewNote) : Boolean(onApplyNote)) && review?.status === 'relevant';
+  const reviewWith = sample
+    ? (choice) => setSampleReview(choice === 'reset' ? null : { status: choice, reviewedAt: null })
+    : onReview;
 
   return (
     <Stack space="space.075">
@@ -223,30 +287,33 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
       </Text>
 
       <Stack space="space.050">
-        {candidate.review ? (
+        {candidate.ai && !review && (
+          <Text><Em>Found by AI. The quote is checked word for word against the source; whether it records a real decision needs a teammate's review.</Em></Text>
+        )}
+        {review ? (
           <Inline space="space.100" alignBlock="center">
-            <Lozenge appearance={candidate.review.status === 'relevant' ? 'success' : 'removed'}>
-              {candidate.review.status === 'relevant' ? 'Marked relevant' : 'Dismissed'}
+            <Lozenge appearance={review.status === 'relevant' ? 'success' : 'removed'}>
+              {review.status === 'relevant' ? 'Marked relevant' : 'Dismissed'}
             </Lozenge>
-            <Text>Reviewed {candidate.review.reviewedAt ? new Date(candidate.review.reviewedAt).toLocaleDateString() : ''}</Text>
+            <Text>{sample ? 'Sample only: not saved' : `Reviewed ${review.reviewedAt ? new Date(review.reviewedAt).toLocaleDateString() : ''}`}</Text>
           </Inline>
-        ) : <Text>{sample ? 'On a real project scan, teammates review each finding here and can post a note to the issue.' : 'Needs teammate review'}</Text>}
-        {onReview && (
+        ) : <Text>{sample ? 'Sample: try the review a teammate would do. Nothing is saved.' : 'Needs teammate review'}</Text>}
+        {reviewWith && (
           <Inline space="space.100">
-            {!candidate.review && <>
-              <Button appearance="primary" isDisabled={reviewBusy} onClick={() => onReview('relevant')}>
-                Mark relevant
+            {!review && <>
+              <Button appearance="primary" isDisabled={reviewBusy} onClick={() => reviewWith('relevant')}>
+                {sample ? 'Mark relevant (sample)' : 'Mark relevant'}
               </Button>
-              <Button appearance="subtle" isDisabled={reviewBusy} onClick={() => onReview('dismissed')}>
-                Dismiss
+              <Button appearance="subtle" isDisabled={reviewBusy} onClick={() => reviewWith('dismissed')}>
+                {sample ? 'Dismiss (sample)' : 'Dismiss'}
               </Button>
             </>}
-            {candidate.review && (
-              <Button appearance="subtle" isDisabled={reviewBusy} onClick={() => onReview('reset')}>
+            {review && (
+              <Button appearance="subtle" isDisabled={reviewBusy} onClick={() => reviewWith('reset')}>
                 Undo review
               </Button>
             )}
-            {canNote && candidate.affectedIssues.length > 0 && <Text>You can now add a note to an affected issue below.</Text>}
+            {canNote && candidate.affectedIssues.length > 0 && <Text>{sample ? 'You can now preview the note for an affected issue below.' : 'You can now add a note to an affected issue below.'}</Text>}
           </Inline>
         )}
       </Stack>
@@ -262,15 +329,24 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
                     const href = sample ? null : siteLink(siteUrl, issueUrls[affected.issueKey] ?? `/browse/${affected.issueKey}`);
                     return href ? <Link href={href}>{affected.issueKey}</Link> : affected.issueKey;
                   })()}
-                  {` · relevance ${affected.relevance.toFixed(2)}`}
+                  {` · ${matchStrength(affected)}`}
                 </Text>
                 {affected.wordingStatus === 'outdated' && <Lozenge appearance="moved">Outdated wording found</Lozenge>}
                 {affected.wordingStatus === 'replacement-found' && <Lozenge appearance="success">Replacement wording found</Lozenge>}
               </Inline>
               {affected.reasons.map((reason) => <Text key={reason}>• {reason}</Text>)}
+              <Text><Em>Match score {affected.relevance.toFixed(2)}: a signal strength from these reasons, not a probability.</Em></Text>
               <DriftLine drift={affected.drift} />
               {(canNote || candidate.notes?.[affected.issueKey]) && (
-                <NoteAction candidate={candidate} issueKey={affected.issueKey} siteUrl={siteUrl} onApplyNote={onApplyNote} onDraftNote={onDraftNote} />
+                <NoteAction
+                  candidate={candidate}
+                  issueKey={affected.issueKey}
+                  siteUrl={siteUrl}
+                  onApplyNote={onApplyNote}
+                  onPreviewNote={onPreviewNote}
+                  onDraftNote={onDraftNote}
+                  sample={sample}
+                />
               )}
             </Stack>
           ))}

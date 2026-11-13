@@ -1,0 +1,130 @@
+{
+  "protocol": "Same protocol as labels-heldout.json. Fresh set: labelled by hand from the prepared text and frozen (checksum in fresh/FROZEN.txt) before any extractor (old or new) was run on these files. decision: the notes record that the group decided, agreed, approved or resolved something, or reached consensus. open question: a question about what to do that the notes leave unresolved. proposal: a suggestion put to the group that is not recorded as decided. Questions answered in the notes are not labelled. ambiguous: true marks borderline sentences (action items, individual opinions, deferrals, agenda boilerplate, tentative plans); a finding that matches one is not scored. A sentence repeated in a file is labelled once.",
+  "documents": [
+    {
+      "file": "openjs-cpc-2025-02-18.md",
+      "labels": [
+        { "kind": "proposal", "text": "Would be nice to do some evangelizing around the CPC policy updates once this is wrapped up.", "ambiguous": true },
+        { "kind": "decision", "text": "remove CPC-meeting label", "ambiguous": true },
+        { "kind": "decision", "text": "Working in next working session", "ambiguous": true },
+        { "kind": "open_question", "text": "Non-violent communication / strategic workplace conflict resolution training? #1106", "ambiguous": true },
+        { "kind": "open_question", "text": "Are there any initiatives or agenda items that we should use a working session to further progress on?", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "openjs-cpc-2025-03-04.md",
+      "labels": [
+        { "kind": "decision", "text": "General agreement as how to move forward" },
+        { "kind": "decision", "text": "Split doc into two different pieces (one for maintainers and one for consumers)", "ambiguous": true },
+        { "kind": "decision", "text": "Now the work needs to happen", "ambiguous": true },
+        { "kind": "decision", "text": "Planning to work on it in next working session", "ambiguous": true },
+        { "kind": "decision", "text": "Explained why the change. This requires more +1", "ambiguous": true },
+        { "kind": "decision", "text": "Working session in 3 weeks or work on it async", "ambiguous": true },
+        { "kind": "decision", "text": "Closing as travel fund is under control for the upcoming node event.", "ambiguous": true },
+        { "kind": "decision", "text": "No need to modify process as the changes undertaken where sufficient to address the initial issues." },
+        { "kind": "decision", "text": "Can close", "ambiguous": true },
+        { "kind": "decision", "text": "remove label in the collab space", "ambiguous": true },
+        { "kind": "open_question", "text": "Are there any initiatives or agenda items that we should use a working session to further progress on?", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "openjs-cpc-2025-03-18.md",
+      "labels": [
+        { "kind": "decision", "text": "Discussed but without Ben here, we didn’t go far", "ambiguous": true },
+        { "kind": "decision", "text": "will work on in next working session", "ambiguous": true },
+        { "kind": "proposal", "text": "Proposal To Add A SERVICES.md or similar documentation to OpenJS Projects #1425", "ambiguous": true },
+        { "kind": "open_question", "text": "continuity policy and package registries? #1355", "ambiguous": true },
+        { "kind": "open_question", "text": "Are there any initiatives or agenda items that we should use a working session to further progress on?", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "openjs-cpc-2025-04-01.md",
+      "labels": [
+        { "kind": "decision", "text": "PR has landed, Robin confirmed no legal reason why we can’t cover", "ambiguous": true },
+        { "kind": "decision", "text": "Discussion around updating intake form. Ben will do that.", "ambiguous": true },
+        { "kind": "decision", "text": "next steps: gather input in the issue", "ambiguous": true },
+        { "kind": "open_question", "text": "Tobie - seems like discussion has stalled, not sure what to do" },
+        { "kind": "decision", "text": "Will finalize the doc and bring it to the CPC for approval", "ambiguous": true },
+        { "kind": "proposal", "text": "Proposal To Add A SERVICES.md or similar documentation to OpenJS Projects #1425", "ambiguous": true },
+        { "kind": "open_question", "text": "continuity policy and package registries? #1355", "ambiguous": true },
+        { "kind": "open_question", "text": "Are there any initiatives or agenda items that we should use a working session to further progress on?", "ambiguous": true },
+        { "kind": "decision", "text": "Working session next week", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-lang-team-2022-11-01.md",
+      "labels": [
+        { "kind": "open_question", "text": "Question: Should these work?", "ambiguous": true },
+        { "kind": "proposal", "text": "Probably can't adopt this today.", "ambiguous": true },
+        { "kind": "proposal", "text": "But maybe we should be taking an opportunity to expose less of the grammar...", "ambiguous": true },
+        { "kind": "proposal", "text": "But I agree we should probably avoid parser recovery now anyway.", "ambiguous": true },
+        { "kind": "proposal", "text": "Josh: In the past we did pat_or to extend here. Maybe we fix this long-term the same way.", "ambiguous": true },
+        { "kind": "decision", "text": "Seems like the answer is 'no', this (error recovery playing a role) is just a compiler bug.", "ambiguous": true },
+        { "kind": "decision", "text": "Starting an FCP merge.", "ambiguous": true },
+        { "kind": "proposal", "text": "Josh: We would need an edition to get this back, but seems fine.", "ambiguous": true },
+        { "kind": "proposal", "text": "Josh: Seems like we could have some kind of mem::discriminant on 'unfilled' enums, rather than requiring dummy values", "ambiguous": true },
+        { "kind": "proposal", "text": "Josh: It seems like we ought to not document something as UB unless we're *also* providing an alternative.", "ambiguous": true },
+        { "kind": "proposal", "text": "Niko: In async context, we want to reuse stack memory after moving out, so I do think we should draw some lines.", "ambiguous": true },
+        { "kind": "open_question", "text": "Niko: Would like some consensus on what we do with this PR", "ambiguous": true },
+        { "kind": "decision", "text": "Josh: No objections to documenting current behavior (and considering future extensions)", "ambiguous": true },
+        { "kind": "decision", "text": "Josh: If we're just documenting the current state and we can change it in the future, then seems OK.", "ambiguous": true },
+        { "kind": "decision", "text": "rfcbot merge planned (to be started by Niko)", "ambiguous": true },
+        { "kind": "open_question", "text": "Is there anything we can do better?", "ambiguous": true },
+        { "kind": "open_question", "text": "Mark: Do we really want to answer this question *now*?", "ambiguous": true },
+        { "kind": "proposal", "text": "Niko: \"Let's land this, but let's still dive into some more experimentation with syntax\".", "ambiguous": true },
+        { "kind": "decision", "text": "Josh to propose fcp, can sort out via concerns/comments.", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-lang-team-2022-10-25.md",
+      "labels": [
+        { "kind": "decision", "text": "mark as beta-accepted and stable-accepted" },
+        { "kind": "decision", "text": "*general mutters of agreement.*" },
+        { "kind": "decision", "text": "simulacrum: I feel like last week we concluded not going to happen in short term." },
+        { "kind": "proposal", "text": "joshtriplett: So we should author a comment that says \"We might be interested in doing this but not in a sufficiently short time frame to discourage creation of a macro.\"" },
+        { "kind": "open_question", "text": "For example, could we still do mir-only rlibs this way?" },
+        { "kind": "open_question", "text": "is there other utility for this PR beyond the issue?" },
+        { "kind": "open_question", "text": "pnkfelix: I guess that's the question, is it lang or compiler?", "ambiguous": true },
+        { "kind": "open_question", "text": "scottmcm: so why *doesn't* the example above work?", "ambiguous": true },
+        { "kind": "proposal", "text": "joshtriplett: for narrow case of this PR, shall we just do an FCP?", "ambiguous": true },
+        { "kind": "decision", "text": "Josh started an FCP and un-nominated.", "ambiguous": true },
+        { "kind": "decision", "text": "@rfcbot close", "ambiguous": true },
+        { "kind": "decision", "text": "Initiating Comment: Discussing in the lang-team meeting. This proposal has been under discussion for some time, and is always something we expected to work, so even though the RFC was only recently opened, I am going to move to merge...", "ambiguous": true },
+        { "kind": "decision", "text": "I'm going to go ahead and kick off the rfcbot fcp merge on this one.", "ambiguous": true },
+        { "kind": "decision", "text": "nikomatsakis: I agree with that.", "ambiguous": true },
+        { "kind": "decision", "text": "pnkfelix: We'll take care of it.", "ambiguous": true },
+        { "kind": "decision", "text": "nikomatsakis to write comment (done)", "ambiguous": true },
+        { "kind": "proposal", "text": "joshtriplett: Should approve for beta/stable backport.", "ambiguous": true },
+        { "kind": "proposal", "text": "Let's get this reviewed though.", "ambiguous": true },
+        { "kind": "proposal", "text": "observation: we need to get more prompt with RFCs", "ambiguous": true },
+        { "kind": "proposal", "text": "Would like a design document and a design meeting", "ambiguous": true },
+        { "kind": "proposal", "text": "My inclination is to accept these in its current form, on the theory that if we wanted to reject them, we should've already done so, and nothing stops us from assigning meaning in the future.", "ambiguous": true },
+        { "kind": "proposal", "text": "Definitely if we want to get involved with that we should comment on the pre-rfc by pcwalton linked from #73632", "ambiguous": true },
+        { "kind": "proposal", "text": "nikomatsakis: Maybe I'm just objecting with my compiler team hat on.", "ambiguous": true },
+        { "kind": "proposal", "text": "I think we should enable the use case -- it should be possible to link.", "ambiguous": true },
+        { "kind": "proposal", "text": "joshtriplett: Even if we think this is the correct behavior, we should consider that at our leisure, rather than doing it accidentally.", "ambiguous": true },
+        { "kind": "proposal", "text": "Should take 24 hours -- but to some extent I would argue we should do it.", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-polonius-wg-2019-03-07.md",
+      "labels": [
+        { "kind": "decision", "text": "Ultimately, a good starter issue was found in creating a new Polonius \"hybrid\" variant, bridging the location insensitive and complete analyses: a realistic way for rustc to use Polonius.", "ambiguous": true },
+        { "kind": "decision", "text": "The major next steps we decided on were:", "ambiguous": true },
+        { "kind": "decision", "text": "[Matthew] will write mentoring instructions for the hybrid algorithm task.", "ambiguous": true },
+        { "kind": "decision", "text": "[Niko] and [Albin] will prepare the follow-up walkthrough of Polonius (the specific time, and contents).", "ambiguous": true },
+        { "kind": "decision", "text": "[Niko] will review the subset relation PR.", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-polonius-wg-2019-04-23.md",
+      "labels": [
+        { "kind": "proposal", "text": "The goal would be to find crates, and functions, which would be representative along different dimensions, and incorporate their facts files in the Polonius repo to be used for tests and benchmarks.", "ambiguous": true },
+        { "kind": "proposal", "text": "A useful task was mentioned for the near future: going through the Polonius failures in rustc's test suite (using the `--compare-mode polonius` test mode), categorizing the failures, and possibly making the tests pass, by `--bless`ing the expected polonius test output files.", "ambiguous": true },
+        { "kind": "decision", "text": "[Albin] will continue on the liveness fact generation in rustc.", "ambiguous": true },
+        { "kind": "decision", "text": "[Rémy] will continue work on the `Hybrid` variant optimization.", "ambiguous": true },
+        { "kind": "decision", "text": "[@lokalmatador] will familiarize with the steps [Niko] wrote, with available help from the rest of the WG.", "ambiguous": true }
+      ]
+    }
+  ]
+}

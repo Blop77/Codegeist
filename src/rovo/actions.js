@@ -234,7 +234,7 @@ export async function prepareDecisionNote(payload, context) {
     return {
       ...result,
       issueLink: link(siteUrl, `/browse/${issueKey}`),
-      nextStep: `Open ${issueKey} and choose the Decision Drift Radar panel to review the exact note and post it. The draft expires in ${result.expiresInMinutes} minutes.`
+      nextStep: `Open ${issueKey} and choose the Decision Drift Radar panel to review the exact comment and post it. The draft expires in ${result.expiresInMinutes} minutes.${result.sharingNote ? ` ${result.sharingNote} The person will see and confirm that follow-up text.` : ''}`
     };
   } catch {
     console.error('Decision Drift Radar could not prepare a Rovo draft');
