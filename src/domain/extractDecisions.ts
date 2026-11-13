@@ -208,6 +208,33 @@ function* walkSentences(text: string): Generator<Sentence & { underDecisionHeadi
   }
 }
 
+/** One line of a source as the AI pass shows it: a heading, or a sentence with its offsets. */
+export type SourceLine = { heading: string } | { sentence: string; start: number; end: number; listItem: boolean };
+
+/**
+ * A source's headings and sentences in reading order, split exactly as `verifyProposedFindings`
+ * splits them. The AI pass numbers these sentences and asks the model for numbers rather than
+ * copied text, so an answer can never fail verification because of a copying slip.
+ */
+export function sourceLines(text: string): SourceLine[] {
+  const out: SourceLine[] = [];
+  let lineStart = 0;
+  while (lineStart <= text.length) {
+    let lineEnd = text.indexOf('\n', lineStart);
+    if (lineEnd === -1) lineEnd = text.length;
+    const line = text.slice(lineStart, lineEnd);
+    const heading = line.trim() ? headingOf(line) : null;
+    if (heading !== null) out.push({ heading });
+    else if (line.trim()) {
+      const marker = LIST_MARKER.exec(line);
+      const contentStart = lineStart + (marker ? marker[0].length : 0);
+      for (const s of sentencesIn(text, contentStart, lineEnd)) out.push({ sentence: s.text, start: s.start, end: s.end, listItem: marker !== null });
+    }
+    lineStart = lineEnd + 1;
+  }
+  return out;
+}
+
 /** Keeps quotes short while still reproducing exactly via offsets. */
 function shortenSpan(text: string, s: Sentence): Sentence & { shortened: boolean } {
   if (s.end - s.start <= MAX_QUOTE_LENGTH) return { ...s, shortened: false };

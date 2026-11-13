@@ -69,15 +69,23 @@ function App() {
   };
 
   // Asks the AI for decisions the wording rules missed. Only on request: usage is billed per call.
+  // For a real project the AI pass runs as a background job; this polls until it finishes.
   const findWithAi = async () => {
     if (!result?.ok) return;
     setAiLoading(true);
     setAiError(null);
     try {
-      const response = result.sample
+      let response = result.sample
         ? await invoke('getSampleAiFindings')
         : await invoke('getAiFindings', { projectKey: result.projectKey });
-      if (response?.ok) setAiResult(response);
+      const deadline = Date.now() + 6 * 60 * 1000;
+      while (response?.ok && response.pending && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        response = await invoke('getAiJob', { projectKey: result.projectKey });
+      }
+      if (response?.ok && response.pending) {
+        setAiError('The AI pass is still running. Its findings will appear here when you scan again in a few minutes.');
+      } else if (response?.ok) setAiResult(response);
       else setAiError(response?.error ?? 'The AI pass could not complete.');
     } catch {
       setAiError('The AI pass could not complete. The current findings are unaffected.');
@@ -301,7 +309,7 @@ function App() {
                 {aiLoading ? 'Asking the AI…' : 'Find more with AI'}
               </Button>
             </Inline>
-            {aiLoading && <Inline space="space.100"><Spinner /><Text>Reading {result.sample ? 'the sample' : 'your'} pages and issues…</Text></Inline>}
+            {aiLoading && <Inline space="space.100"><Spinner /><Text>{result.sample ? 'Reading the sample pages and issues…' : 'The AI is reading your pages and issues in the background. This usually takes under a minute; you can leave this page and the findings will appear on your next scan.'}</Text></Inline>}
             {aiError && <SectionMessage appearance="warning" title="AI pass not run">{aiError}</SectionMessage>}
             {aiResult?.ok && !aiResult.saved && aiResult.candidates.length === 0 && (
               <SectionMessage appearance="information" title="Nothing more found">
@@ -313,7 +321,7 @@ function App() {
                 <Text>
                   {aiResult.saved
                     ? `${aiResult.candidates.length} ${aiResult.candidates.length === 1 ? 'finding' : 'findings'} from an earlier AI pass${aiResult.savedAt ? ` (${new Date(aiResult.savedAt).toLocaleDateString()})` : ''}, checked again word for word against the current sources. Teammates and the issue panel see them too.`
-                    : `${aiResult.candidates.length} AI ${aiResult.candidates.length === 1 ? 'finding' : 'findings'}${typeof aiResult.newCount === 'number' ? ` (${aiResult.newCount} new)` : ''}, each with a quote checked against its source.${aiResult.rejected > 0 ? ` ${aiResult.rejected} AI suggestions were dropped because their quote did not match the source.` : ''}`}
+                    : `${aiResult.candidates.length} AI ${aiResult.candidates.length === 1 ? 'finding' : 'findings'}${typeof aiResult.newCount === 'number' ? ` (${aiResult.newCount} new)` : ''}, each with a quote checked against its source.${aiResult.rejected > 0 ? ` ${aiResult.rejected} AI ${aiResult.rejected === 1 ? 'suggestion was' : 'suggestions were'} left out because ${aiResult.rejected === 1 ? 'it' : 'they'} did not pass the app's quote checks.` : ''}`}
                 </Text>
                 {aiResult.candidates.map((candidate) => (
                   <CandidateCard

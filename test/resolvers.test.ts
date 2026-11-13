@@ -75,13 +75,35 @@ g.__jira = (path: string, json: any, options: any) => {
   return json({ issues: rawIssues });
 };
 
-const aiReply = (findings: unknown[]) => async () => ({
-  choices: [{ message: { role: 'assistant', content: '```json\n' + JSON.stringify({ findings }) + '\n```' } }]
-});
+/**
+ * A model reply naming sentences by the numbers the AI pass showed. Each `quote` is looked up in
+ * the prompt; one the prompt does not number gets a number that does not exist.
+ */
+const aiReply = (findings: Array<{ quote: string; kind: string }>) => async (req: any) => {
+  const numbered = new Map<string, string>();
+  for (const line of String(req?.messages?.[1]?.content ?? '').split('\n')) {
+    const m = /^(\d+\.\d+) (.*)$/.exec(line);
+    if (m) numbered.set(m[2], m[1]);
+  }
+  const reply = findings.map(({ quote, kind }) => ({ id: numbered.get(quote) ?? '99.99', kind }));
+  return { choices: [{ message: { role: 'assistant', content: '```json\n' + JSON.stringify({ findings: reply }) + '\n```' } }] };
+};
 
 const { handler } = await import('../src/resolvers/index.js');
 const actions = await import('../src/rovo/actions.js');
 const ctx = { accountId: 'acc-1', siteUrl: SITE };
+
+const { runAiJob } = await import('../src/resolvers/ai.js');
+/** Starts the AI pass, runs the queued job as Forge would, then reads the result as the page does. */
+async function runAiPass(projectKey: string) {
+  const started = await handler.getAiFindings({ payload: { projectKey }, context: ctx });
+  if (!started.ok || !started.pending) return started;
+  const waiting = await handler.getAiJob({ payload: { projectKey }, context: ctx });
+  assert.equal(waiting.pending, true, 'the page sees the job running');
+  while (g.__queued?.length) await runAiJob(g.__queued.shift());
+  return handler.getAiJob({ payload: { projectKey }, context: ctx });
+}
+
 const rovo = (inputs: Record<string, unknown>, accountId = 'acc-1') => ({
   ...inputs,
   context: { accountId, jira: { url: `${SITE}/browse/MC-9`, issueKey: 'MC-9', projectKey: 'MC' } }
@@ -104,10 +126,10 @@ let aiFinding: any;
 
 test('AI findings are verified, saved, and come back on later scans and in the issue panel', async () => {
   g.__chat = aiReply([
-    { sourceId: 'page-777', quote: INDIRECT, kind: 'decision', reason: 'Detail from a different source.' },
-    { sourceId: 'page-777', quote: 'The team will send email on Tuesdays only.', kind: 'decision' }
+    { quote: INDIRECT, kind: 'decision' },
+    { quote: 'The team will send email on Tuesdays only.', kind: 'decision' }
   ]);
-  const ai = await handler.getAiFindings({ payload: { projectKey: 'MC' }, context: ctx });
+  const ai = await runAiPass('MC');
   assert.equal(ai.ok, true);
   assert.equal(ai.candidates.length, 1);
   assert.equal(ai.newCount, 1);
@@ -135,9 +157,10 @@ test('AI findings are verified, saved, and come back on later scans and in the i
   clearCooldowns();
   g.__chat = async (req: any) => {
     assert.ok(req.messages[1].content.includes('Tuesday-only sends'), 'saved AI findings are listed as already found');
-    return aiReply([{ sourceId: 'page-777', quote: INDIRECT, kind: 'decision' }])();
+    assert.ok(req.messages[1].content.includes(`(already found) ${INDIRECT}`), 'and are not numbered, so they cannot be returned again');
+    return aiReply([{ quote: INDIRECT, kind: 'decision' }])(req);
   };
-  const again = await handler.getAiFindings({ payload: { projectKey: 'MC' }, context: ctx });
+  const again = await runAiPass('MC');
   assert.equal(again.newCount, 0);
   assert.equal(again.candidates.length, 1);
   assert.equal(memory.get('ai-proposals:MC').proposals.length, 1);
@@ -446,12 +469,14 @@ test('recovery cannot clear a newer posting reservation', async () => {
   }
 });
 
-test('Rovo: the AI action runs the AI pass and respects the cooldown', async () => {
+test('Rovo: the AI action starts the background AI pass and respects the cooldown', async () => {
   clearCooldowns();
   g.__chat = aiReply([]);
   const first = await actions.findMoreDecisionsWithAi(rovo({ projectKey: 'MC' }));
   assert.equal(first.ok, true);
-  assert.equal(first.newAiFindings, 0);
+  assert.equal(first.started, true);
+  assert.match(first.message, /running in the background/);
+  while (g.__queued?.length) await runAiJob(g.__queued.shift());
   const second = await actions.findMoreDecisionsWithAi(rovo({ projectKey: 'MC' }));
   assert.equal(second.ok, false);
   assert.match(second.error, /moments ago/);

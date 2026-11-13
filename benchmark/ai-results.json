@@ -1,0 +1,969 @@
+{
+  "model": "claude-sonnet-5",
+  "ranAt": "2026-11-13T07:42:32.260077+00:00",
+  "protocol": "forge-numbered-background-v3: development pipeline check, then recall, then heldout; one prepared page per call",
+  "deployment": "6.17.0",
+  "maxCompletionTokens": 12000,
+  "modelCalls": 20,
+  "developmentRowsReused": 4,
+  "developmentRowsReusedFromDeployment": "6.14.0",
+  "developmentRowsReusedMaxCompletionTokens": 3000,
+  "state": "complete",
+  "labels": {
+    "labels.json": "f0e0fc93eac5fc16405fc39387d5e0c5ff6fd4e0ad8f488b9561518a92e6b292",
+    "labels-recall.json": "90440737fd58a3093d5119b58ea7dca499762933a47236b6b8c3f1401ce2106f",
+    "labels-heldout.json": "e22108ab3d21e1d4b7a05d688ed56d250656f65514cab79cc4120727f5bd87ec"
+  },
+  "inputCoverage": {
+    "corpus": [
+      {
+        "file": "openjs-cpc-2025-08-05.md",
+        "totalLines": 78,
+        "linesSent": 78,
+        "selectableSentences": 57
+      },
+      {
+        "file": "openjs-cpc-2025-08-19.md",
+        "totalLines": 66,
+        "linesSent": 66,
+        "selectableSentences": 44
+      },
+      {
+        "file": "openjs-cpc-2025-09-16.md",
+        "totalLines": 56,
+        "linesSent": 56,
+        "selectableSentences": 34
+      },
+      {
+        "file": "openjs-cpc-2025-09-30.md",
+        "totalLines": 93,
+        "linesSent": 93,
+        "selectableSentences": 65
+      },
+      {
+        "file": "rust-lang-team-2022-11-22.md",
+        "totalLines": 204,
+        "linesSent": 204,
+        "selectableSentences": 154
+      },
+      {
+        "file": "rust-traits-wg-2019-02-24.md",
+        "totalLines": 26,
+        "linesSent": 26,
+        "selectableSentences": 22
+      },
+      {
+        "file": "rust-traits-wg-2019-03-04.md",
+        "totalLines": 39,
+        "linesSent": 39,
+        "selectableSentences": 25
+      },
+      {
+        "file": "rust-traits-wg-2019-03-11.md",
+        "totalLines": 46,
+        "linesSent": 46,
+        "selectableSentences": 26
+      }
+    ],
+    "recall": [
+      {
+        "file": "openjs-cpc-2025-05-27.md",
+        "totalLines": 55,
+        "linesSent": 55,
+        "selectableSentences": 38
+      },
+      {
+        "file": "openjs-cpc-2025-05-13.md",
+        "totalLines": 68,
+        "linesSent": 68,
+        "selectableSentences": 48
+      },
+      {
+        "file": "openjs-cpc-2025-04-29.md",
+        "totalLines": 73,
+        "linesSent": 73,
+        "selectableSentences": 48
+      },
+      {
+        "file": "openjs-cpc-2025-04-15.md",
+        "totalLines": 72,
+        "linesSent": 72,
+        "selectableSentences": 46
+      },
+      {
+        "file": "rust-lang-team-2022-11-08.md",
+        "totalLines": 211,
+        "linesSent": 211,
+        "selectableSentences": 161
+      },
+      {
+        "file": "rust-polonius-wg-2019-05-14.md",
+        "totalLines": 28,
+        "linesSent": 28,
+        "selectableSentences": 18
+      },
+      {
+        "file": "rust-polonius-wg-2019-05-07.md",
+        "totalLines": 22,
+        "linesSent": 22,
+        "selectableSentences": 16
+      },
+      {
+        "file": "rust-polonius-wg-2019-04-30.md",
+        "totalLines": 24,
+        "linesSent": 24,
+        "selectableSentences": 17
+      }
+    ],
+    "heldout": [
+      {
+        "file": "openjs-cpc-2025-07-22.md",
+        "totalLines": 92,
+        "linesSent": 92,
+        "selectableSentences": 64
+      },
+      {
+        "file": "openjs-cpc-2025-07-08.md",
+        "totalLines": 81,
+        "linesSent": 81,
+        "selectableSentences": 53
+      },
+      {
+        "file": "openjs-cpc-2025-06-24.md",
+        "totalLines": 72,
+        "linesSent": 72,
+        "selectableSentences": 51
+      },
+      {
+        "file": "openjs-cpc-2025-06-09.md",
+        "totalLines": 81,
+        "linesSent": 81,
+        "selectableSentences": 56
+      },
+      {
+        "file": "rust-lang-team-2022-11-15.md",
+        "totalLines": 265,
+        "linesSent": 265,
+        "selectableSentences": 195
+      },
+      {
+        "file": "rust-polonius-wg-2019-06-11.md",
+        "totalLines": 39,
+        "linesSent": 39,
+        "selectableSentences": 29
+      },
+      {
+        "file": "rust-polonius-wg-2019-06-04.md",
+        "totalLines": 33,
+        "linesSent": 33,
+        "selectableSentences": 22
+      },
+      {
+        "file": "rust-polonius-wg-2019-05-28.md",
+        "totalLines": 30,
+        "linesSent": 30,
+        "selectableSentences": 23
+      }
+    ]
+  },
+  "files": [
+    {
+      "ai": [],
+      "file": "openjs-cpc-2025-08-05.md",
+      "inputSha256": "4da5350f166e423d40f8ea7b427b0e39dab3a1d103bb2829a258264b86f36931",
+      "rejected": 0,
+      "set": "corpus",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 2287,
+        "output_tokens": 10,
+        "total_tokens": 2297
+      }
+    },
+    {
+      "ai": [],
+      "file": "openjs-cpc-2025-08-19.md",
+      "inputSha256": "70b509ca924c515d42fe47961f91b41d9069def8188661e656efd02aaa6160f2",
+      "rejected": 0,
+      "set": "corpus",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 2016,
+        "output_tokens": 10,
+        "total_tokens": 2026
+      }
+    },
+    {
+      "ai": [],
+      "file": "openjs-cpc-2025-09-16.md",
+      "inputSha256": "40e5064d3e1f495ec744d408963c78b1f2d87bea9c8d39c0e976bca232b9697b",
+      "rejected": 0,
+      "set": "corpus",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1782,
+        "output_tokens": 10,
+        "total_tokens": 1792
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "Impact project should not go through the form."
+        },
+        {
+          "kind": "decision",
+          "quote": "The issue and form will be fixed to address this."
+        },
+        {
+          "kind": "decision",
+          "quote": "The working session will focus on improving the default charter template and charter reviews:"
+        },
+        {
+          "kind": "open_question",
+          "quote": "We also briefly discussed whether projects that had too much in the charter could remove sections that were requested without CPC approval."
+        },
+        {
+          "kind": "proposal",
+          "quote": "Additionally we would ask for a clearer description of the TSC composition (for example min/max size, how folks are elected)."
+        },
+        {
+          "kind": "proposal",
+          "quote": "Next steps would be a pull request that clarifies in the PROJECT_PROGRESSION file that the template is the source of truth for what belongs in the charter, and adds better defaults an guidance to the charter."
+        },
+        {
+          "kind": "proposal",
+          "quote": "This seems a good topic to move forward in the next working session."
+        }
+      ],
+      "file": "openjs-cpc-2025-09-30.md",
+      "inputSha256": "210f86393f1dc4e08d064736787325b9bd24e840e993fd8dae7bfb81ae9f5d6f",
+      "rejected": 0,
+      "set": "corpus",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 2784,
+        "output_tokens": 2107,
+        "total_tokens": 4891
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "open_question",
+          "quote": "scottmcm: Is https://github.com/rust-lang/rust/issues/86730 a blocker?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "scott: is it breaking to remove the requirement?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "scott: are there any weird things that could come up like `const { a } - b` that would change meaning?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "josh: would this change meaning if we removed the `;` requirement?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "scott: sounds like yes, so is it useful as a statement?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "gary: could we change `async` too?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "gary: only thing needing a decisions here is the with or without block, since we can't change that."
+        },
+        {
+          "kind": "open_question",
+          "quote": "josh: does it need a meeting or just a proposal?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "josh: how hard would it be to fix?"
+        },
+        {
+          "kind": "proposal",
+          "quote": "josh: you should make fcp+concern 3349, scott!"
+        },
+        {
+          "kind": "proposal",
+          "quote": "I want lang team to sign off explicitly on the idea of introducing *some kind* of user-exposed limit that 1."
+        },
+        {
+          "kind": "proposal",
+          "quote": "it may be a good idea to revise this lint to allow someone to override the threshold, rather than keeping the hard-coded limit of 1,000,000."
+        },
+        {
+          "kind": "proposal",
+          "quote": "(I am willing to consider \"what should this lints default be: is it allow-by-default or deny-by-default\" as something in scope for lang team discussion.)"
+        },
+        {
+          "kind": "proposal",
+          "quote": "gary: if it's not a breaking change then we can just accept it now and change it later"
+        }
+      ],
+      "file": "rust-lang-team-2022-11-22.md",
+      "inputSha256": "61186f61f800ca5ca7e0475196296c0c92ea20cc68d3facb697e94c84140e8c6",
+      "rejected": 0,
+      "set": "corpus",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 5635,
+        "output_tokens": 1993,
+        "total_tokens": 7628
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "Schedule a meeting to dig into some of the lifetime problems around async-await."
+        },
+        {
+          "kind": "decision",
+          "quote": "Explore the use cases for lazy normalization, trying to create a summary of exactly which test cases are causing problems and why, and what it might take to fix them (can it be done without a full chalk transition?)."
+        },
+        {
+          "kind": "decision",
+          "quote": "Explore the use cases for GATs, trying to find a set of specific examples from async-await and other contexts."
+        },
+        {
+          "kind": "decision",
+          "quote": "Get tests plus FCP around `type Foo = impl Bar` (centril)"
+        },
+        {
+          "kind": "open_question",
+          "quote": "It seems likely that we could do an initial impl of GATs in rustc without chalk, but would it be enough?"
+        }
+      ],
+      "file": "rust-traits-wg-2019-02-24.md",
+      "inputSha256": "9c122003272818b48ffae96d8c9d58646e9f5bb141a05a323ec0281ecb20a838",
+      "rejected": 0,
+      "set": "corpus",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1300,
+        "output_tokens": 460,
+        "total_tokens": 1760
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "open_question",
+          "quote": "how we might support `async fn` in traits without full GAT support"
+        },
+        {
+          "kind": "proposal",
+          "quote": "the idea of a research intern working on chalk and what they might do"
+        }
+      ],
+      "file": "rust-traits-wg-2019-03-04.md",
+      "inputSha256": "bd923beff416a22ce854856900a8aa4c89f63540ffda601d699f5a9db6402640",
+      "rejected": 0,
+      "set": "corpus",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1563,
+        "output_tokens": 1396,
+        "total_tokens": 2959
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "Next step: re-establish the cycle in those queries so it can be observed."
+        },
+        {
+          "kind": "decision",
+          "quote": "Try to correct the `generics_of` query etc for constants so we can observe what results."
+        },
+        {
+          "kind": "proposal",
+          "quote": "Maybe discuss other chalk improvements?"
+        },
+        {
+          "kind": "proposal",
+          "quote": "Maybe discuss the \"lifetime capture\" problem in impl Trait?"
+        }
+      ],
+      "file": "rust-traits-wg-2019-03-11.md",
+      "inputSha256": "8b77f9e3b01f176fe1c3542ed3475168185ecfa888955cc400db88089f871376",
+      "rejected": 0,
+      "set": "corpus",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1651,
+        "output_tokens": 1342,
+        "total_tokens": 2993
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "open_question",
+          "quote": "continuity policy and package registries?"
+        },
+        {
+          "kind": "proposal",
+          "quote": "Resources: GitHub's DevConnect Program #1472 We can pool our resources."
+        }
+      ],
+      "file": "openjs-cpc-2025-05-27.md",
+      "inputSha256": "7c5d5f75ce32b8698811d3d0beeca743ffc6b226b748c804162e7f09be38a9d1",
+      "rejected": 0,
+      "set": "recall",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1877,
+        "output_tokens": 450,
+        "total_tokens": 2327
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "open_question",
+          "quote": "continuity policy and package registries?"
+        },
+        {
+          "kind": "proposal",
+          "quote": "Review Code of Conduct audit from Kate and focus on next steps"
+        },
+        {
+          "kind": "proposal",
+          "quote": "Discuss with Rudd what security requirements we want to make mandatory for OpenJS projects."
+        }
+      ],
+      "file": "openjs-cpc-2025-05-13.md",
+      "inputSha256": "a836da78ba5262eb81339ff59c3ae8c058ef190e5390e4b593e0e1fee5082c61",
+      "rejected": 0,
+      "set": "recall",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 2103,
+        "output_tokens": 693,
+        "total_tokens": 2796
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "Agreed this will be the topic for the next working group meeting"
+        },
+        {
+          "kind": "open_question",
+          "quote": "Michael Dawson asked for clarification on the policies regarding project initiated funding."
+        },
+        {
+          "kind": "open_question",
+          "quote": "Chris asked about the impact on COC, reporting and enforcement."
+        },
+        {
+          "kind": "open_question",
+          "quote": "continuity policy and package registries?"
+        },
+        {
+          "kind": "proposal",
+          "quote": "Tobie mentioned the need to review existing delegation to project documentation, so that we do not duplicate"
+        }
+      ],
+      "file": "openjs-cpc-2025-04-29.md",
+      "inputSha256": "9a287e72e48924314ea8448a3edb0f457562341d6b4cf096ab3b59197ae63f52",
+      "rejected": 0,
+      "set": "recall",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 2175,
+        "output_tokens": 680,
+        "total_tokens": 2855
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "ML → electron would be ok sharing the private list."
+        },
+        {
+          "kind": "open_question",
+          "quote": "TL → any objections to waiting on 3.0 to adopt?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "TL → managing this in a non github way across projects is a challenge, can we do this in a lightweight way that accomplishes the goal but does not have the security concerns."
+        },
+        {
+          "kind": "open_question",
+          "quote": "To ML, what level of information would you be comfortable sharing?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "continuity policy and package registries?"
+        },
+        {
+          "kind": "proposal",
+          "quote": "ML → Electron would not want their list to be made public, we do have this documented internally and sharing this with OpenJS might be an option"
+        }
+      ],
+      "file": "openjs-cpc-2025-04-15.md",
+      "inputSha256": "510ce1c4a04735715120a1c22b4d9af08950924384070cd028736a385693ff11",
+      "rejected": 0,
+      "set": "recall",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 2172,
+        "output_tokens": 1360,
+        "total_tokens": 3532
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "nikomatsakis: i'm okay with making this an Unresolved Question."
+        },
+        {
+          "kind": "decision",
+          "quote": "CONCLUSION: pnkfelix to comment on the issue."
+        },
+        {
+          "kind": "open_question",
+          "quote": "Question: should `a == b` where `a, b: *const dyn Foo` be"
+        },
+        {
+          "kind": "open_question",
+          "quote": "Q: is there precedent for such a guarantee from `==`?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "Discussion of \"What is notion of \"same\" that we are trying to achieve via `==`?\""
+        },
+        {
+          "kind": "open_question",
+          "quote": "pnkfelix: I want to come back to the idea of how important it is to guarantee termination."
+        },
+        {
+          "kind": "proposal",
+          "quote": "put an \"opt-in\" attribute on the trait to permit upcasting, or possibly per supertrait"
+        },
+        {
+          "kind": "proposal",
+          "quote": "put an \"opt-out\" attribute on the trait to forbid upcasting, or possibly per supertrait"
+        },
+        {
+          "kind": "proposal",
+          "quote": "It would be good to get data."
+        },
+        {
+          "kind": "proposal",
+          "quote": "Maybe we can ask people to help gather it, it shouldn't be hard."
+        },
+        {
+          "kind": "proposal",
+          "quote": "joshtriplett: Concern is to explore syntax, especially for the most common cases (e.g., \"sealed\" instead of `impl crate`)."
+        },
+        {
+          "kind": "proposal",
+          "quote": "I don't want to block the RFC on bikeshedding."
+        },
+        {
+          "kind": "proposal",
+          "quote": "nikomatsakis: having feature available would help us see how it's actually being used."
+        },
+        {
+          "kind": "proposal",
+          "quote": "niko: I wouldn't be opposed to a lint against these kinds of comparisons, since they can be easily misused."
+        },
+        {
+          "kind": "proposal",
+          "quote": "nikomatsakis proposal: count backedges + function calls."
+        },
+        {
+          "kind": "proposal",
+          "quote": "nikomatsakis: I would like to keep a limit, but make it predictable, and allow you to set it at the const fn definition."
+        },
+        {
+          "kind": "proposal",
+          "quote": "joshtriplett: I would like to remove the limit and separately permit some kind of watchdog timer that kills rustc."
+        }
+      ],
+      "file": "rust-lang-team-2022-11-08.md",
+      "inputSha256": "4a904f370e85a5dd3a75aabe7351945e550eb29776a98a527717c16dc1480af8",
+      "rejected": 0,
+      "set": "recall",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 5867,
+        "output_tokens": 1118,
+        "total_tokens": 6985
+      }
+    },
+    {
+      "ai": [],
+      "file": "rust-polonius-wg-2019-05-14.md",
+      "inputSha256": "f0513b5244ee2bab58a61c05f284e8a9b1ff1aa05360d44e427f1bc269ce3a38",
+      "rejected": 0,
+      "set": "recall",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1438,
+        "output_tokens": 10,
+        "total_tokens": 1448
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "proposal",
+          "quote": "even though we always think about the topic, we noticed analyzing the test suite, tests and correctness, are tasks which should actually be mentioned in the Roadmap."
+        },
+        {
+          "kind": "proposal",
+          "quote": "the polonius compare-mode likely has little or no documentation, fixing that would be important as part of the general documentation effort needed by the project."
+        }
+      ],
+      "file": "rust-polonius-wg-2019-05-07.md",
+      "inputSha256": "36c0f0561cd7c91f59d28e055dd9e927077115a171e7c520609580dc8228af56",
+      "rejected": 0,
+      "set": "recall",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1248,
+        "output_tokens": 46,
+        "total_tokens": 1294
+      }
+    },
+    {
+      "ai": [],
+      "file": "rust-polonius-wg-2019-04-30.md",
+      "inputSha256": "9caba6f6ad1f29988c8dda516b0ca58aecc7228cb2c854d55b6565faf546a0a1",
+      "rejected": 0,
+      "set": "recall",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1387,
+        "output_tokens": 10,
+        "total_tokens": 1397
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "Discussed in the working session, next step is to clarify and draft specific questions for legal review."
+        },
+        {
+          "kind": "open_question",
+          "quote": "Clarify applicable contexts and if/how they might differ, e.g."
+        },
+        {
+          "kind": "open_question",
+          "quote": "The junk pr situation, does this fall under SPAM?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "Question for legal, if it is determined that it is not allowed, what is their advice on policies and repercussions, e.g."
+        },
+        {
+          "kind": "open_question",
+          "quote": "what happens if this is not allowed, a PR is landed and we discover later that this was generated by AI."
+        },
+        {
+          "kind": "open_question",
+          "quote": "Will this topic take up a bunch of time without getting to an answer."
+        },
+        {
+          "kind": "proposal",
+          "quote": "asking for any followup; interesting idea that perhaps other projects, like Express, may be interested in"
+        },
+        {
+          "kind": "proposal",
+          "quote": "frame this as how to allow AI assisted development, rather than if it is allowed."
+        },
+        {
+          "kind": "proposal",
+          "quote": "Create an issue to work towards an end of year townhall/newsletter update (perhaps we can add in updates from projects, can a 2-way update increase participation)"
+        }
+      ],
+      "file": "openjs-cpc-2025-07-22.md",
+      "inputSha256": "a680c6f32105ac0c6c59859a3cfce1131d381da8c01b64eed6c7d7d81eae9e0f",
+      "rejected": 0,
+      "set": "heldout",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 2563,
+        "output_tokens": 908,
+        "total_tokens": 3471
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "open_question",
+          "quote": "devil is in the details: how exactly do we do this so that it’s valuable and not too difficult/costly set up"
+        },
+        {
+          "kind": "open_question",
+          "quote": "continuity policy and package registries?"
+        },
+        {
+          "kind": "proposal",
+          "quote": "should require the CPC to collect questions"
+        },
+        {
+          "kind": "proposal",
+          "quote": "appetite for organizing something like this"
+        },
+        {
+          "kind": "proposal",
+          "quote": "bringing those together is a priority"
+        },
+        {
+          "kind": "proposal",
+          "quote": "1 step would be to require every project to self-audit"
+        },
+        {
+          "kind": "proposal",
+          "quote": "would be good to have a few more eyes on it"
+        }
+      ],
+      "file": "openjs-cpc-2025-07-08.md",
+      "inputSha256": "18fdba93f2a3766e82944b7f450995bca17e0c76f6eefecaab61b87502fd6719",
+      "rejected": 0,
+      "set": "heldout",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 2087,
+        "output_tokens": 1284,
+        "total_tokens": 3371
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "topic for next working session"
+        },
+        {
+          "kind": "decision",
+          "quote": "Please review async and we will discuss in two weeks."
+        },
+        {
+          "kind": "decision",
+          "quote": "Opened new issue on this topic: #1486"
+        }
+      ],
+      "file": "openjs-cpc-2025-06-24.md",
+      "inputSha256": "2d1ac84ab9749e10750d5ee1737f7915201c31d54eb002dd12253d1abf7f6d7f",
+      "rejected": 0,
+      "set": "heldout",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 2158,
+        "output_tokens": 61,
+        "total_tokens": 2219
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "Updating policies to account for this."
+        },
+        {
+          "kind": "decision",
+          "quote": "Overall feeling seems to be in favor of being able to share this information for egregious cases."
+        },
+        {
+          "kind": "decision",
+          "quote": "Keeping open until then."
+        },
+        {
+          "kind": "decision",
+          "quote": "Next steps are creating a PR out of the doc and having the CPC comment in the PR"
+        },
+        {
+          "kind": "open_question",
+          "quote": "continuity policy and package registries?"
+        },
+        {
+          "kind": "proposal",
+          "quote": "We might need to provide more info/context for projects to be able to make the call"
+        },
+        {
+          "kind": "proposal",
+          "quote": "Potential working session topic"
+        }
+      ],
+      "file": "openjs-cpc-2025-06-09.md",
+      "inputSha256": "5fce9fb50484fb85e9baaa1103b55823075f7a31f6d321b0091a5afe2679a244",
+      "rejected": 0,
+      "set": "heldout",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 2231,
+        "output_tokens": 1418,
+        "total_tokens": 3649
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "No more meetings planned until end of year."
+        },
+        {
+          "kind": "decision",
+          "quote": "Nov 22 -- meet if you can (nikomatsakis not coming :)"
+        },
+        {
+          "kind": "decision",
+          "quote": "Nov 23 -- skip"
+        },
+        {
+          "kind": "decision",
+          "quote": "Dec 20 (Triage) -- optional, meet if you can"
+        },
+        {
+          "kind": "decision",
+          "quote": "Dec 21 (Design) -- skip"
+        },
+        {
+          "kind": "decision",
+          "quote": "Dec 27 (Triage) -- skip"
+        },
+        {
+          "kind": "decision",
+          "quote": "Dec 28 (Design) -- skip"
+        },
+        {
+          "kind": "decision",
+          "quote": "(@nikomatsakis and I agree that counting terminators executed is not a good metric to expose to users in the long term (it is too coupled to the internal details of MIR).)"
+        },
+        {
+          "kind": "decision",
+          "quote": "@rfcbot fcp merge"
+        },
+        {
+          "kind": "open_question",
+          "quote": "(I am willing to consider \"what should this lints default be: is it allow-by-default or deny-by-default\" as something in scope for lang team discussion.)"
+        },
+        {
+          "kind": "open_question",
+          "quote": "scottmcm: how does this interact with parallel compilation RFC?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "joshtriplett: lints don't take parameters, how would you do that?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "machine dependent?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "nikomatsakis: we do have a reasonable plan, but once we drop the limit, we can't go back there, right?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "pnkfelix: changing the metric now is a breaking change, right?"
+        },
+        {
+          "kind": "open_question",
+          "quote": "nikomatsakis: we're counting every step today, we'd be counting a strict subset of those steps, right?"
+        },
+        {
+          "kind": "proposal",
+          "quote": "nikomatsakis: maybe ping Wesley"
+        },
+        {
+          "kind": "proposal",
+          "quote": "I want lang team to sign off explicitly on the idea of introducing *some kind* of user-exposed limit that 1."
+        },
+        {
+          "kind": "proposal",
+          "quote": "it may be a good idea to revise this lint to allow someone to override the threshold, rather than keeping the hard-coded limit of 1,000,000."
+        },
+        {
+          "kind": "proposal",
+          "quote": "pnkfelix: idea of using lint mechanism to specify constraints."
+        }
+      ],
+      "file": "rust-lang-team-2022-11-15.md",
+      "inputSha256": "7549fc45c9d0f0d04ba4369e56c0896c6eaf5a76ac52a0de9cdea4821e6419cb",
+      "rejected": 0,
+      "set": "heldout",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 8522,
+        "output_tokens": 10575,
+        "total_tokens": 19097
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "open_question",
+          "quote": "Now, to get the rustc changes landed, we were still wondering about the differences between the `region_live_at` facts computed by rustc, and the ones computed by Polonius."
+        },
+        {
+          "kind": "proposal",
+          "quote": "[Niko] and [Albin] discussed (around here) a way to remove the computation of the `region_live_at` relation without losing precision, as both a safety measure and an intermediary step towards handling moves/initialization."
+        },
+        {
+          "kind": "proposal",
+          "quote": "With [Niko] being away at Mozilla All Hands next week, we mentioned that we might do short async updates instead of a sync meeting, but the plan was overall:"
+        }
+      ],
+      "file": "rust-polonius-wg-2019-06-11.md",
+      "inputSha256": "a48bdbc7fef2775e7f984b074edd4445bde2c39149e92f8b315ff7e56dd809e8",
+      "rejected": 0,
+      "set": "heldout",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1927,
+        "output_tokens": 701,
+        "total_tokens": 2628
+      }
+    },
+    {
+      "ai": [
+        {
+          "kind": "decision",
+          "quote": "A call was scheduled for the following Friday to talk about subsets and the proposal."
+        }
+      ],
+      "file": "rust-polonius-wg-2019-06-04.md",
+      "inputSha256": "2b3ffa37a970f39a223b7da2ee65a82b748adc9d21cdc432f1059383d3e2b574",
+      "rejected": 0,
+      "set": "heldout",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1542,
+        "output_tokens": 27,
+        "total_tokens": 1569
+      }
+    },
+    {
+      "ai": [],
+      "file": "rust-polonius-wg-2019-05-28.md",
+      "inputSha256": "ffcced52284178bddb4fef7a2928e9b7f490ade5fc90db0e9dad8739b5d77f14",
+      "rejected": 0,
+      "set": "heldout",
+      "status": "complete",
+      "usage": {
+        "input_tokens": 1524,
+        "output_tokens": 10,
+        "total_tokens": 1534
+      }
+    }
+  ]
+}

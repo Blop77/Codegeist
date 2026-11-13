@@ -1,6 +1,6 @@
 /** Rovo actions read findings and prepare drafts for approval in Jira. */
 import { readIssueRecord, scanIssue, scanProject, validProjectKey } from '../resolvers/scan';
-import { findWithAi } from '../resolvers/ai';
+import { startAiJob } from '../resolvers/ai';
 import { attachReviewState, validReviewTarget } from '../resolvers/notes';
 import { trackScan } from '../resolvers/drift';
 import { prepareRovoDraft } from '../resolvers/rovo-drafts';
@@ -187,9 +187,9 @@ export async function findIssueDecisions(payload) {
 }
 
 /**
- * Runs the app's AI pass for a project: asks the Atlassian-hosted model for decisions the wording
- * rules missed, and keeps only those whose quote is found word for word in a source. Verified
- * findings are saved, so the app's pages and later scans show them too.
+ * Starts the app's AI pass for a project as a background job: the Atlassian-hosted model looks
+ * for decisions the wording rules missed, and only findings whose quote is found word for word in
+ * a source are kept. They appear in later scans, on the app's pages and in this agent's answers.
  */
 export async function findMoreDecisionsWithAi(payload, context) {
   const { key: projectKey, error } = projectKeyFrom(payload);
@@ -198,24 +198,18 @@ export async function findMoreDecisionsWithAi(payload, context) {
   try {
     const scanned = await scanProject(projectKey, { cloudId: payload?.context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
-    const result = await findWithAi({
-      scopeKey: projectKey,
-      sources: scanned.sources,
-      issues: scanned.issueRecords,
-      known: [...scanned.candidates, ...scanned.aiCandidates],
-      saveFor: projectKey
-    });
-    if (!result.ok) return { ok: false, error: result.error };
-    const fresh = result.candidates.map((c) => ({ ...c, ai: true }));
-    const { candidates } = await attachReviewState(projectKey, fresh);
-    return report({ projectKey }, { ...scanned, candidates: [], aiCandidates: [] }, siteOrigin(payload), {
-      newAiFindings: candidates.length,
-      droppedAiSuggestions: result.rejected,
-      model: result.model
-    }, candidates);
-  } catch (error) {
-    console.error('Decision Drift Radar agent AI pass failed', error);
-    return { ok: false, error: 'The AI pass could not complete. The rule-based findings are unaffected.' };
+    const started = await startAiJob({ projectKey, sources: scanned.sources, known: [...scanned.candidates, ...scanned.aiCandidates] });
+    if (!started.ok) return { ok: false, error: started.error };
+    if (!started.pending) return { ok: true, projectKey, started: false, message: 'There was no new text for the AI pass to read; every sentence was already covered by the findings.' };
+    return {
+      ok: true,
+      projectKey,
+      started: true,
+      message: `The AI pass is running in the background for ${projectKey}. It usually takes under a minute. Its findings, each with a quote checked word for word against its source, then appear on the Decision Drift Radar page and when the user asks you to scan ${projectKey} again.`
+    };
+  } catch {
+    console.error('Decision Drift Radar agent AI pass failed');
+    return { ok: false, error: 'The AI pass could not start. The rule-based findings are unaffected.' };
   }
 }
 

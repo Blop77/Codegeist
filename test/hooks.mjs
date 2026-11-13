@@ -6,7 +6,8 @@ const MOCKS = {
   '@forge/api': new URL('./mocks/api.mjs', import.meta.url).href,
   '@forge/resolver': new URL('./mocks/resolver.mjs', import.meta.url).href,
   '@forge/kvs': new URL('./mocks/kvs.mjs', import.meta.url).href,
-  '@forge/llm': new URL('./mocks/llm.mjs', import.meta.url).href
+  '@forge/llm': new URL('./mocks/llm.mjs', import.meta.url).href,
+  '@forge/events': new URL('./mocks/events.mjs', import.meta.url).href
 };
 
 export async function resolve(specifier, context, next) {

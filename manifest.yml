@@ -63,7 +63,7 @@ modules:
       name: Find more decisions with AI
       function: findMoreDecisionsWithAi
       actionVerb: CREATE
-      description: Runs the app's AI pass on a Jira project to find indirectly phrased decisions the wording rules missed. Returns only findings whose quote matches a source word for word. Use only when the user asks for more findings. Limited per site per day.
+      description: Starts the app's background AI pass on a Jira project to find indirectly phrased decisions the rules missed. Findings, with quotes matched word for word, appear in the next scan. Use only when the user asks for more findings. Limited per day.
       inputs:
         projectKey:
           title: Project key
@@ -98,6 +98,10 @@ modules:
         - avi:jira:updated:issue
       filter:
         ignoreSelf: true
+  consumer:
+    - key: ai-pass-consumer
+      queue: ai-pass
+      function: runAiJob
   llm:
     - key: decision-drift-radar-llm
       model:
@@ -115,6 +119,9 @@ modules:
       handler: index.prepareDecisionNote
     - key: watchIssueUpdates
       handler: index.watchIssueUpdates
+    - key: runAiJob
+      handler: index.runAiJob
+      timeoutSeconds: 900
 resources:
   - key: main
     path: src/frontend/index.jsx
