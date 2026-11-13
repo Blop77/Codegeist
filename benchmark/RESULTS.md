@@ -28,6 +28,45 @@ After tuning: 7 findings, 0 of them matching an ambiguous label (not scored).
 
 - none
 
+## Fresh set (labels frozen before any run; used once for the commitment-vs-opinion change)
+
+8 files, 9 strict and 76 ambiguous labels.
+
+| | Labels | Before tuning | After tuning |
+| --- | --- | --- | --- |
+| Decisions | 5 | n/a / 0% | 100% / 20% |
+| Open questions | 3 | 0% / 0% | 13% / 33% |
+| Proposals | 1 | 17% / 100% | 25% / 100% |
+| Anything flagged (kind ignored) | 9 | 8% / 11% | 23% / 33% |
+
+After tuning: 33 findings, 20 of them matching an ambiguous label (not scored).
+
+### Missed after tuning
+
+- openjs-cpc-2025-03-04.md · decision · “No need to modify process as the changes undertaken where sufficient to address the initial issues.”
+- openjs-cpc-2025-04-01.md · open_question · “Tobie - seems like discussion has stalled, not sure what to do”
+- rust-lang-team-2022-10-25.md · decision · “mark as beta-accepted and stable-accepted”
+- rust-lang-team-2022-10-25.md · decision · “*general mutters of agreement.*”
+- rust-lang-team-2022-10-25.md · decision · “simulacrum: I feel like last week we concluded not going to happen in short term.”
+- rust-lang-team-2022-10-25.md · open_question · “For example, could we still do mir-only rlibs this way?”
+
+### Wrong kind after tuning
+
+- none
+
+### False alarms after tuning
+
+- rust-lang-team-2022-11-01.md · open_question · “Josh: Can we do something partial, incremental today?”
+- rust-lang-team-2022-11-01.md · open_question · “Josh: Do we need an FCP to determine that error recovery shouldn't play a role here?”
+- rust-lang-team-2022-11-01.md · open_question · “Would it be legal to take a &mut, turn it into a *mut, free it, reallocate something at the same address, and then use the &mut?”
+- rust-lang-team-2022-11-01.md · open_question · “What does *dangling* mean?”
+- rust-lang-team-2022-11-01.md · proposal · “Josh: I think you're saying that we should write these rules and then I can write an RFC to avoid giving these hints.”
+- rust-lang-team-2022-10-25.md · open_question · “Right now, the case where we already accept them are in macros, but the only kind of macros that can accept this is something which eats a whole token tree (won't parse as a number (or literal?”
+- rust-lang-team-2022-10-25.md · open_question · “Part that is compiler: how do we implement that?”
+- rust-lang-team-2022-10-25.md · open_question · “pnkfelix: ...this PR did tee up for me the distinction between PR #86844 vs issue #73632, which is "formal support for linking rlibs using some other linker"?”
+- rust-lang-team-2022-10-25.md · proposal · “joshtriplett: I have a suggestion for how to make forward progress.”
+- rust-lang-team-2022-10-25.md · proposal · “joshtriplett: Right, let's say, we don't know if we can commit to always creating an artifact that links with an arbitrary linker, but happy to see the option of producing such a format, as long as it is explicitly requested.”
+
 ## Held-out set
 
 8 files, 37 strict and 99 ambiguous labels.
@@ -35,13 +74,13 @@ After tuning: 7 findings, 0 of them matching an ambiguous label (not scored).
 | | Labels | Before tuning | After tuning | Rules + AI |
 | --- | --- | --- | --- | --- |
 | Decisions | 8 | 100% / 25% | 100% / 25% | 20% / 25% |
-| Open questions | 14 | 50% / 57% | 57% / 86% | 45% / 93% |
+| Open questions | 14 | 50% / 57% | 100% / 86% | 65% / 93% |
 | Proposals | 15 | 67% / 80% | 63% / 80% | 54% / 87% |
-| Anything flagged (kind ignored) | 37 | 61% / 59% | 69% / 78% | 49% / 84% |
+| Anything flagged (kind ignored) | 37 | 61% / 59% | 88% / 78% | 57% / 84% |
 
-Model: claude-sonnet-5. Decision counts for rules: 2 found, 0 false positives, 6 misses. Rules + AI: 2 found, 8 false positives, 6 misses. Across all kinds, 50 AI findings passed verification and 0 were rejected. Ambiguous matches excluded: 15 for rules and 44 for rules + AI.
+Model: claude-sonnet-5. Decision counts for rules: 2 found, 0 false positives, 6 misses. Rules + AI: 2 found, 8 false positives, 6 misses. Across all kinds, 50 AI findings passed verification and 0 were rejected. Ambiguous matches excluded: 14 for rules and 43 for rules + AI.
 
-After tuning: 57 findings, 15 of them matching an ambiguous label (not scored).
+After tuning: 47 findings, 14 of them matching an ambiguous label (not scored).
 
 ### Missed after tuning
 
@@ -62,15 +101,6 @@ After tuning: 57 findings, 15 of them matching an ambiguous label (not scored).
 
 ### False alarms after tuning
 
-- rust-lang-team-2022-11-15.md · open_question · “josh: we want to keep this project member focused, but do we feel we have enough representation from compiler?”
-- rust-lang-team-2022-11-15.md · open_question · “pnkfelix: if we do that and keep the end the same, I agree we can assert it will accept strictly a superset of what is accepted before, but whether that's the correct threshold is a question?”
-- rust-lang-team-2022-11-15.md · open_question · “joshtriplett: can we get it down to what is compiler vs lang?”
-- rust-lang-team-2022-11-15.md · open_question · “pnkfelix: if we say that whether there'll be a metric is lang team, and we are also going to say we don't want to allow for any breaking change here, ie., the threshold might be something we could strictly raise now, my concern now is that if we're going to say lang team”
-- rust-lang-team-2022-11-15.md · open_question · “do we prevent that?”
-- rust-lang-team-2022-11-15.md · open_question · “scottmcm: are we sure we can do that?”
-- rust-lang-team-2022-11-15.md · open_question · “joshtriplett: at very least, for same reason we disallow `\0` in a c string, can we also explicitly disallow a literal null inside a c string?”
-- rust-lang-team-2022-11-15.md · open_question · “joshtriplett: how do we stop doing that?”
-- rust-lang-team-2022-11-15.md · open_question · “when did we decide *that*?”
 - rust-lang-team-2022-11-15.md · proposal · “Anything that depends on time is so much more breaking than anything we could do that depends on the code you're running.”
 - rust-lang-team-2022-11-15.md · proposal · “mara: roughly what I propose here but also not rejecting it later on, even, at least for byte strings”
 - rust-lang-team-2022-11-15.md · proposal · “mara: ummmmmmmm, let's try it out”
@@ -83,19 +113,20 @@ After tuning: 57 findings, 15 of them matching an ambiguous label (not scored).
 | | Labels | Before tuning | After tuning | Rules + AI |
 | --- | --- | --- | --- | --- |
 | Decisions | 10 | 100% / 30% | 100% / 70% | 80% / 80% |
-| Open questions | 12 | 83% / 42% | 92% / 92% | 60% / 100% |
+| Open questions | 12 | 83% / 42% | 100% / 83% | 61% / 92% |
 | Proposals | 7 | 45% / 71% | 86% / 86% | 58% / 100% |
-| Anything flagged (kind ignored) | 29 | 80% / 55% | 96% / 86% | 67% / 97% |
+| Anything flagged (kind ignored) | 29 | 80% / 55% | 100% / 83% | 68% / 93% |
 
 Model: claude-sonnet-5. Decision counts for rules: 7 found, 0 false positives, 3 misses. Rules + AI: 8 found, 2 false positives, 2 misses. Across all kinds, 32 AI findings passed verification and 0 were rejected. Ambiguous matches excluded: 14 for rules and 30 for rules + AI.
 
-After tuning: 40 findings, 14 of them matching an ambiguous label (not scored).
+After tuning: 38 findings, 14 of them matching an ambiguous label (not scored).
 
 ### Missed after tuning
 
 - openjs-cpc-2025-08-05.md · decision · “pause decisions until then”
 - openjs-cpc-2025-09-30.md · decision · “Impact project should not go through the form.”
 - rust-lang-team-2022-11-22.md · proposal · “gary: if it's not a breaking change then we can just accept it now and change it later”
+- rust-lang-team-2022-11-22.md · open_question · “Is it a blocker?”
 - rust-traits-wg-2019-02-24.md · open_question · “It seems likely that we could do an initial impl of GATs in rustc without chalk, but would it be enough?”
 
 ### Wrong kind after tuning
@@ -104,7 +135,28 @@ After tuning: 40 findings, 14 of them matching an ambiguous label (not scored).
 
 ### False alarms after tuning
 
-- rust-lang-team-2022-11-22.md · open_question · “josh: which case are we in?”
+- none
+
+## Old vs new rules (counts)
+
+Old = the rules at `fa2a139` (origin/main before the commitment-vs-opinion change); new = the current rules. TP = true positives, FP = false positives (wrong kind counts as a false positive for the kind found), FN = misses. "Decisions" scores decision findings against decision labels; "Anything flagged" ignores kind. The recall set labels decisions only. Ambiguous matches are findings that matched an ambiguous label and are excluded.
+
+| Set | Measure | Rules | TP | FP | FN | Precision / recall | Ambiguous matches excluded |
+| --- | --- | --- | ---: | ---: | ---: | --- | ---: |
+| recall | Decisions | old | 7 | 0 | 3 | 100% / 70% | 0 |
+| recall | Decisions | new | 7 | 0 | 3 | 100% / 70% | 0 |
+| fresh | Decisions | old | 1 | 0 | 4 | 100% / 20% | 21 |
+| fresh | Anything flagged | old | 3 | 13 | 6 | 19% / 33% | 21 |
+| fresh | Decisions | new | 1 | 0 | 4 | 100% / 20% | 20 |
+| fresh | Anything flagged | new | 3 | 10 | 6 | 23% / 33% | 20 |
+| heldout | Decisions | old | 2 | 0 | 6 | 100% / 25% | 15 |
+| heldout | Anything flagged | old | 29 | 13 | 8 | 69% / 78% | 15 |
+| heldout | Decisions | new | 2 | 0 | 6 | 100% / 25% | 14 |
+| heldout | Anything flagged | new | 29 | 4 | 8 | 88% / 78% | 14 |
+| corpus | Decisions | old | 7 | 0 | 3 | 100% / 70% | 14 |
+| corpus | Anything flagged | old | 25 | 1 | 4 | 96% / 86% | 14 |
+| corpus | Decisions | new | 7 | 0 | 3 | 100% / 70% | 14 |
+| corpus | Anything flagged | new | 24 | 0 | 5 | 100% / 83% | 14 |
 
 ## Sources
 
@@ -116,6 +168,14 @@ After tuning: 40 findings, 14 of them matching an ambiguous label (not scored).
 - `recall/rust-polonius-wg-2019-05-14.md`: [rust-lang/compiler-team/content/working-groups/polonius/minutes/2019.05.14-meeting.md](https://github.com/rust-lang/compiler-team/blob/824f8dc0f12fbcc9fb8a70bd3e4becd597cfd9bc/content/working-groups/polonius/minutes/2019.05.14-meeting.md) at `824f8dc`
 - `recall/rust-polonius-wg-2019-05-07.md`: [rust-lang/compiler-team/content/working-groups/polonius/minutes/2019.05.07-meeting.md](https://github.com/rust-lang/compiler-team/blob/824f8dc0f12fbcc9fb8a70bd3e4becd597cfd9bc/content/working-groups/polonius/minutes/2019.05.07-meeting.md) at `824f8dc`
 - `recall/rust-polonius-wg-2019-04-30.md`: [rust-lang/compiler-team/content/working-groups/polonius/minutes/2019.04.30-meeting.md](https://github.com/rust-lang/compiler-team/blob/824f8dc0f12fbcc9fb8a70bd3e4becd597cfd9bc/content/working-groups/polonius/minutes/2019.04.30-meeting.md) at `824f8dc`
+- `fresh/openjs-cpc-2025-04-01.md`: [openjs-foundation/cross-project-council/meetings/2025/2025-04-01.md](https://github.com/openjs-foundation/cross-project-council/blob/1ff9fdad971aece7a00903f6dd458382e2461fbf/meetings/2025/2025-04-01.md) at `1ff9fda`
+- `fresh/openjs-cpc-2025-03-18.md`: [openjs-foundation/cross-project-council/meetings/2025/2025-03-18.md](https://github.com/openjs-foundation/cross-project-council/blob/1ff9fdad971aece7a00903f6dd458382e2461fbf/meetings/2025/2025-03-18.md) at `1ff9fda`
+- `fresh/openjs-cpc-2025-03-04.md`: [openjs-foundation/cross-project-council/meetings/2025/2025-03-04.md](https://github.com/openjs-foundation/cross-project-council/blob/1ff9fdad971aece7a00903f6dd458382e2461fbf/meetings/2025/2025-03-04.md) at `1ff9fda`
+- `fresh/openjs-cpc-2025-02-18.md`: [openjs-foundation/cross-project-council/meetings/2025/2025-02-18.md](https://github.com/openjs-foundation/cross-project-council/blob/1ff9fdad971aece7a00903f6dd458382e2461fbf/meetings/2025/2025-02-18.md) at `1ff9fda`
+- `fresh/rust-lang-team-2022-11-01.md`: [rust-lang/lang-team/minutes/2022-11-01.md](https://github.com/rust-lang/lang-team/blob/5c39d37302657b025302ee8a14f9716960ec6414/minutes/2022-11-01.md) at `5c39d37`
+- `fresh/rust-lang-team-2022-10-25.md`: [rust-lang/lang-team/minutes/2022-10-25.md](https://github.com/rust-lang/lang-team/blob/5c39d37302657b025302ee8a14f9716960ec6414/minutes/2022-10-25.md) at `5c39d37`
+- `fresh/rust-polonius-wg-2019-04-23.md`: [rust-lang/compiler-team/content/working-groups/polonius/minutes/2019.04.23-meeting.md](https://github.com/rust-lang/compiler-team/blob/824f8dc0f12fbcc9fb8a70bd3e4becd597cfd9bc/content/working-groups/polonius/minutes/2019.04.23-meeting.md) at `824f8dc`
+- `fresh/rust-polonius-wg-2019-03-07.md`: [rust-lang/compiler-team/content/working-groups/polonius/minutes/2019.03.07-meeting.md](https://github.com/rust-lang/compiler-team/blob/824f8dc0f12fbcc9fb8a70bd3e4becd597cfd9bc/content/working-groups/polonius/minutes/2019.03.07-meeting.md) at `824f8dc`
 - `heldout/openjs-cpc-2025-07-22.md`: [openjs-foundation/cross-project-council/meetings/2025/2025-07-22.md](https://github.com/openjs-foundation/cross-project-council/blob/14665520c6126e74e047296d7d2afa2cddf38f39/meetings/2025/2025-07-22.md) at `1466552`
 - `heldout/openjs-cpc-2025-07-08.md`: [openjs-foundation/cross-project-council/meetings/2025/2025-07-08.md](https://github.com/openjs-foundation/cross-project-council/blob/8bc2e02b5d85678341117cdc33a7e07ecb0c2074/meetings/2025/2025-07-08.md) at `8bc2e02`
 - `heldout/openjs-cpc-2025-06-24.md`: [openjs-foundation/cross-project-council/meetings/2025/2025-06-24.md](https://github.com/openjs-foundation/cross-project-council/blob/e11d4b176dcd577e0085d8e8ba490e5e1e038587/meetings/2025/2025-06-24.md) at `e11d4b1`

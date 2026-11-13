@@ -157,23 +157,49 @@ function authorName(user) {
 /** First line of every comment the app posts. Used to keep those comments out of later scans. */
 export const NOTE_MARKER = 'Decision Drift Radar note';
 
-/** ADF body for a reviewed note: the note, the quoted evidence, and a link to the source. */
-export function noteCommentBody({ note, quote, sourceTitle, sourceUrl, confirmedIn }) {
+/**
+ * The fixed follow-up posted when the app cannot establish that everyone who can see the Jira
+ * issue may also see the decision's source. It contains nothing taken from the source.
+ */
+export const GENERIC_NOTE = 'A recorded decision may affect this issue. Its source may not be visible to everyone who can see this issue, so it is not quoted here. Ask the author of this comment for the details before relying on the current description.';
+
+const bylineFor = (confirmedIn) => (confirmedIn === 'rovo'
+  ? ' · drafted with the Rovo agent and approved in the Jira issue panel'
+  : ' · reviewed by a teammate before posting');
+const noteLines = (note) => String(note ?? '').split(/\n+/).map((line) => line.trim()).filter(Boolean);
+
+/**
+ * The comment the app posts, as Jira ADF and as the exact plain text shown in the preview.
+ * `mode` is 'quoted' (the note, the quoted evidence and the source) or 'generic' (GENERIC_NOTE
+ * only: no note text, quote, source title or link).
+ */
+export function noteComment({ mode, note, quote, sourceTitle, sourceUrl, confirmedIn }) {
   const text = (value, marks) => ({ type: 'text', text: value, ...(marks ? { marks } : {}) });
+  const byline = bylineFor(confirmedIn);
+  const header = { type: 'paragraph', content: [text(NOTE_MARKER, [{ type: 'strong' }]), text(byline)] };
+  if (mode !== 'quoted') {
+    return {
+      body: { type: 'doc', version: 1, content: [header, { type: 'paragraph', content: [text(GENERIC_NOTE)] }] },
+      text: `${NOTE_MARKER}${byline}\n${GENERIC_NOTE}`
+    };
+  }
   const title = sourceTitle || 'Source';
-  const byline = confirmedIn === 'rovo' ? ' · drafted with the Rovo agent and approved in the Jira issue panel' : ' · reviewed by a teammate before posting';
+  const lines = noteLines(note);
   return {
-    type: 'doc',
-    version: 1,
-    content: [
-      { type: 'paragraph', content: [text(NOTE_MARKER, [{ type: 'strong' }]), text(byline)] },
-      ...note.split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line) => ({ type: 'paragraph', content: [text(line)] })),
-      { type: 'blockquote', content: [{ type: 'paragraph', content: [text(quote)] }] },
-      {
-        type: 'paragraph',
-        content: [text('Source: '), sourceUrl ? text(title, [{ type: 'link', attrs: { href: sourceUrl } }]) : text(title)]
-      }
-    ]
+    body: {
+      type: 'doc',
+      version: 1,
+      content: [
+        header,
+        ...lines.map((line) => ({ type: 'paragraph', content: [text(line)] })),
+        { type: 'blockquote', content: [{ type: 'paragraph', content: [text(quote)] }] },
+        {
+          type: 'paragraph',
+          content: [text('Source: '), sourceUrl ? text(title, [{ type: 'link', attrs: { href: sourceUrl } }]) : text(title)]
+        }
+      ]
+    },
+    text: [`${NOTE_MARKER}${byline}`, ...lines, `“${quote}”`, `Source: ${title}${sourceUrl ? ` (${sourceUrl})` : ''}`].join('\n')
   };
 }
 

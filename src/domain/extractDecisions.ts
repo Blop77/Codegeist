@@ -44,6 +44,28 @@ const UNRESOLVED = [
   /\b(?:open question|tbd|to be (?:decided|determined|confirmed)|undecided|needs? to decide|pending (?:a )?decision|still deciding|not sure yet)\b/i,
 ];
 
+/**
+ * A decision that was taken back ("The decision was reversed", "We rescinded the earlier
+ * agreement", "no longer going with Postgres"). The earlier decision no longer stands, so the
+ * sentence must not be surfaced as a decision (and is not an open question or proposal either).
+ */
+const REVERSAL = [
+  /\b(?:revers(?:e|ed|es|ing|al)|revok(?:e|ed|es|ing)|rescind(?:ed|s|ing)?|withdr(?:ew|awn|aw|aws)|overturn(?:ed|s|ing)?|overrul(?:e|ed|es|ing)|scrapp?(?:ed|ing)?|walk(?:ed|ing)? back|supersed(?:e|ed|es|ing)|annul(?:led|s)?)\b[^.?!]{0,50}\b(?:decision|decided|agreement|agreed|approval|resolution|plan|call)\b/i,
+  /\b(?:decision|agreement|approval|resolution|plan|call)\b[^.?!]{0,50}\b(?:was|is|has been|have been|were|been|got)\s+(?:now\s+)?(?:reversed|revoked|rescinded|withdrawn|overturned|overruled|scrapped|superseded|annulled)\b/i,
+  /\b(?:no longer|not anymore)\s+(?:going with|going to|planning to|proceeding with|using)\b/i,
+  /\bwe\s+(?:changed our minds?|reversed course|backed out|are backing out)\b/i,
+  /^\s*(?:reversed|withdrawn|rescinded|superseded)\s*[:\-–]/i,
+];
+
+/**
+ * A speaker's hedged personal view ("josh: I think we agreed to ship it", "I'd say we decided…"),
+ * or a decision that is conditional or still in the future ("once we agree on the API", "we will
+ * decide next week"). Individual opinions and conditions are not team commitments.
+ */
+const HEDGED_OPINION = /\b(?:i|we)\s+(?:think|guess|suppose|feel|believe|reckon|imagine)\b|\bi(?:'d| would)\s+(?:say|guess)\b|\b(?:maybe|perhaps|possibly|seems? like|it seems|my (?:view|take|opinion)|in my opinion|imo|imho|not sure)\b/i;
+const CONDITIONAL_DECISION =
+  /\b(?:if|once|until|unless|when|after|before|whether|so that|in order to)\b[^.?!]{0,40}\b(?:we|team|everyone|the group)\s+(?:all\s+)?(?:decide|agree|approve|sign off)\b|\b(?:we|team|everyone|the group)\s+(?:will|should|must|need to|have to|hope to|want to|plan to|are going to|'ll)\s+(?:all\s+)?(?:decide|agree|approve|sign off)\b|\bto be (?:agreed|approved|signed off)\b|\b(?:if|once|until|unless)\b[^.?!]{0,30}\bis approved\b/i;
+
 const NEGATED_APPROVAL =
   /\b(?:(?:not|never|isn't|aren't|wasn't|weren't|hasn't|haven't|hadn't)\s+(?:(?:an?|been|yet|currently)\s+){0,2}|(?:nothing|no one|nobody|none)\s+(?:(?:has|have|had|was|were|is|been|yet)\s+){0,3})(?:approved|signed off)\b/i;
 
@@ -94,6 +116,17 @@ const STANDALONE_QUESTION = /^\s*(?:is|are|should|must|do|does|can|could|will|wo
 /** Lines that only point elsewhere ("Related Jira issues: MC-1, MC-5."), never a decision on their own. */
 const REFERENCE_LINE = /^\s*(?:related|linked|see(?: also)?|tracked in|tracking|references?|links?|jira(?: issues?| tickets?)?|issues?|tickets?|owners?|attendees|status)\b[^:]{0,30}:/i;
 
+/** A transcript line that starts with a speaker label ("josh: …", "- @nikomatsakis: …"). */
+const SPEAKER_LINE = /^\s*(?:[-*•]\s+|\d{1,3}[.)]\s+)?@?[A-Za-z][\w.-]{1,24}:\s/;
+const SPEAKER_CAPTURE = /^\s*(?:[-*•]\s+|\d{1,3}[.)]\s+)?@?([A-Za-z][\w.-]{1,24}):\s/;
+const NOT_A_SPEAKER = /^(?:question|questions|link|links|note|notes|action|decision|decisions|conclusion|outcome|proposal|concerns?|agenda|status|owner|next|tracking|summary|todo|update)$/i;
+
+/** The speaker of a line, or null when it has none or the label is a section word. */
+function speakerOf(line: string): string | null {
+  const m = SPEAKER_CAPTURE.exec(line);
+  return m && !NOT_A_SPEAKER.test(m[1]) ? m[1].toLowerCase() : null;
+}
+
 /** Words in a sentence, not counting issue keys. */
 function contentWords(sentence: string): number {
   return sentence.replace(/\b[A-Z][A-Z0-9]{1,9}-\d+\b/g, ' ').split(/\s+/).filter((w) => /[A-Za-z]{2,}/.test(w)).length;
@@ -106,12 +139,22 @@ export const defaultClassifier: SentenceClassifier = (raw, ctx) => {
   if (SELF_REFERENCE.some((re) => re.test(sentence))) return null;
   if (DISCLAIMER.some((re) => re.test(sentence))) return null;
   const isQuestion = sentence.trim().endsWith('?');
+  if (REVERSAL.some((re) => re.test(sentence))) return null;
 
   if (OPEN_LABEL.test(sentence)) return { kind: 'open_question', confidence: 0.8, reasons: ['Starts with an "Open question:" label'] };
   for (const re of UNRESOLVED) {
     if (re.test(sentence)) return { kind: 'open_question', confidence: 0.7, reasons: ['Says the decision is still open'] };
   }
   const explicit = EXPLICIT.find((rule) => rule.re.test(sentence) && !rule.unless?.test(sentence));
+  // "josh: I think we agreed to ship it" and "once we agree on X" are opinions or conditions,
+  // not commitments. Explicit labels ("Decision:", "Agreed:") are never downgraded.
+  const labelled = /^\s*(?:final\s+)?(?:decision|agreed|decided|resolved|outcome|consensus)\b[^.?!:]{0,40}[:\-–]/i.test(sentence);
+  const softened = explicit && !labelled && (CONDITIONAL_DECISION.test(sentence) || (HEDGED_OPINION.test(sentence) && SPEAKER_LINE.test(sentence)));
+  if (explicit && !isQuestion && softened) {
+    return PROPOSAL.test(sentence) && !/:\s*$/.test(sentence)
+      ? { kind: 'proposal', confidence: 0.5, reasons: ['Individual opinion or condition, not recorded as a team decision'] }
+      : null;
+  }
   if (explicit && !isQuestion) {
     const reasons = [explicit.reason];
     let confidence = explicit.confidence;
@@ -121,6 +164,8 @@ export const defaultClassifier: SentenceClassifier = (raw, ctx) => {
     }
     return { kind: 'decision', confidence, reasons };
   }
+  // A speaker's question that the next speaker replies to straight away is conversation, not an open question.
+  if (isQuestion && ctx.answeredByReply) return null;
   if (isQuestion && DECISION_QUESTION.test(sentence)) {
     return { kind: 'open_question', confidence: 0.6, reasons: ['Asks a question that is not answered in the same sentence'] };
   }
@@ -185,8 +230,21 @@ function sentencesIn(text: string, from: number, to: number): Sentence[] {
   return out;
 }
 
+/** The next non-blank line after `from`, or null at the end of the text. */
+function nextContentLine(text: string, from: number): string | null {
+  let start = from + 1;
+  while (start < text.length) {
+    let end = text.indexOf('\n', start);
+    if (end === -1) end = text.length;
+    const line = text.slice(start, end);
+    if (line.trim()) return line;
+    start = end + 1;
+  }
+  return null;
+}
+
 /** Yields each sentence with whether it sits under a decisions heading. */
-function* walkSentences(text: string): Generator<Sentence & { underDecisionHeading: boolean; decisionListItem: boolean }> {
+function* walkSentences(text: string): Generator<Sentence & { underDecisionHeading: boolean; decisionListItem: boolean; answeredByReply: boolean }> {
   let underDecisionHeading = false;
   let decisionListHeading = false;
   let lineStart = 0;
@@ -202,7 +260,14 @@ function* walkSentences(text: string): Generator<Sentence & { underDecisionHeadi
       const marker = LIST_MARKER.exec(line);
       const contentStart = lineStart + (marker ? marker[0].length : 0);
       const decisionListItem = decisionListHeading && marker !== null;
-      for (const s of sentencesIn(text, contentStart, lineEnd)) yield { ...s, underDecisionHeading, decisionListItem };
+      const speaker = speakerOf(line);
+      const next = speaker ? nextContentLine(text, lineEnd) : null;
+      const nextSpeaker = next !== null && headingOf(next) === null ? speakerOf(next) : null;
+      const replied = speaker !== null && nextSpeaker !== null && nextSpeaker !== speaker;
+      const sentences = sentencesIn(text, contentStart, lineEnd);
+      for (const [i, s] of sentences.entries()) {
+        yield { ...s, underDecisionHeading, decisionListItem, answeredByReply: replied && i === sentences.length - 1 && s.text.endsWith('?') };
+      }
     }
     lineStart = lineEnd + 1;
   }
@@ -415,6 +480,7 @@ function extractFromSource(source: SourceRecord, classify: SentenceClassifier): 
       sourceTitle: source.title,
       underDecisionHeading: sentence.underDecisionHeading,
       decisionListItem: sentence.decisionListItem,
+      answeredByReply: sentence.answeredByReply,
     };
     let cls: SentenceClassification | null;
     try {

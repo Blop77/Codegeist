@@ -1,0 +1,4 @@
+Labels frozen before any rules (old or new) ran on benchmark/fresh/.
+Frozen: 2026-11-13T16:20:11Z
+sha256(labels-fresh.json): b91c2c3357ae51389ab5fbb289648ae59e1ada570065e95c1292041f380358d8
+sha256(sources-fresh.tsv): 927c4251e58c7394df56730f9578734ca72ca1fbddf3dc47ee67447b4a95a01a

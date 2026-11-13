@@ -119,9 +119,20 @@ function App() {
 
   const projectOptions = (projects?.projects ?? []).map((project) => ({ label: `${project.name} (${project.key})`, value: project.key }));
 
-  const applyNote = async (candidate, issueKey, note) => {
+  // The server builds the exact comment; a sample preview reads only the bundled sample.
+  const previewNote = async (candidate, issueKey, note) => {
     try {
-      const response = await invoke('applyDecisionNote', notePayload(candidate, issueKey, note));
+      return result?.sample
+        ? await invoke('previewSampleNote', { candidateId: candidate.id, issueKey, note })
+        : await invoke('previewDecisionNote', notePayload(candidate, issueKey, note));
+    } catch {
+      return { ok: false, error: 'Could not prepare the comment preview. Try again.' };
+    }
+  };
+
+  const applyNote = async (candidate, issueKey, note, digest) => {
+    try {
+      const response = await invoke('applyDecisionNote', notePayload(candidate, issueKey, note, digest));
       if (response?.ok) {
         setResult((current) => withNote(current, candidate.id, issueKey, response.note));
         setAiResult((current) => current?.ok ? withNote(current, candidate.id, issueKey, response.note) : current);
@@ -290,7 +301,8 @@ function App() {
                     sample={Boolean(result.sample)}
                     onReview={result.sample ? undefined : (choice) => reviewCandidate(candidate, choice)}
                     reviewBusy={reviewBusyId === candidate.id}
-                    onApplyNote={result.sample ? undefined : (issueKey, note) => applyNote(candidate, issueKey, note)}
+                    onApplyNote={result.sample ? undefined : (issueKey, note, digest) => applyNote(candidate, issueKey, note, digest)}
+                    onPreviewNote={(issueKey, note) => previewNote(candidate, issueKey, note)}
                     onDraftNote={result.sample ? undefined : (issueKey) => draftNote(candidate, issueKey)}
                   />
                 ))}
@@ -332,7 +344,8 @@ function App() {
                     sample={Boolean(result.sample)}
                     onReview={result.sample ? undefined : (choice) => reviewCandidate(candidate, choice)}
                     reviewBusy={reviewBusyId === candidate.id}
-                    onApplyNote={result.sample ? undefined : (issueKey, note) => applyNote(candidate, issueKey, note)}
+                    onApplyNote={result.sample ? undefined : (issueKey, note, digest) => applyNote(candidate, issueKey, note, digest)}
+                    onPreviewNote={(issueKey, note) => previewNote(candidate, issueKey, note)}
                     onDraftNote={result.sample ? undefined : (issueKey) => draftNote(candidate, issueKey)}
                   />
                 ))}

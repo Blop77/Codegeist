@@ -7,8 +7,11 @@ import { aiJobStatus, draftNoteWithAi, findWithAi, startAiJob } from './ai';
 import { confirmRovoDraft, loadRovoDraft } from './rovo-drafts';
 import { lastVisit, saveVisit, trackScan } from './drift';
 import {
-  attachReviewState, canAccessProject, MAX_NOTE_LENGTH, noteEvidence, noteProblem, postNote, reviewKey, validReviewTarget
+  attachReviewState, canAccessProject, composeNote, defaultNoteText, MAX_NOTE_LENGTH, noteProblem, postNote, reviewKey, sourceSharing,
+  validReviewTarget
 } from './notes';
+import { GENERIC_NOTE, noteComment } from './normalize';
+import { createHash } from 'node:crypto';
 
 const resolver = new Resolver();
 
@@ -144,20 +147,62 @@ resolver.define('clearDecisionReview', async ({ payload, context }) => {
   }
 });
 
-/**
- * The app's only Jira write: posts one reviewed note as a comment, as the signed-in user.
- * Requires a finding already marked relevant, and records the comment so it is not posted twice.
- */
-resolver.define('applyDecisionNote', async ({ payload, context }) => {
-  const request = {
+/** The parts of a composed comment the person sees before posting. */
+const previewOf = (composed) => ({
+  mode: composed.mode,
+  text: composed.text,
+  digest: composed.digest,
+  explanation: composed.explanation,
+  note: composed.note
+});
+
+function noteRequest(payload) {
+  return {
     projectKey: String(payload?.projectKey ?? '').trim().toUpperCase(),
     candidateId: String(payload?.candidateId ?? '').trim(),
     issueKey: String(payload?.issueKey ?? '').trim().toUpperCase(),
     note: String(payload?.note ?? '').trim(),
-    quote: String(payload?.quote ?? '').trim()
+    digest: String(payload?.digest ?? '').trim()
   };
-  const problem = noteProblem(request);
-  if (problem) return { ok: false, error: problem };
+}
+
+/**
+ * The exact comment the app would post for a finding and issue, built by the server with the
+ * person's current access. When the app cannot establish that everyone who can see the issue may
+ * also see the source, the comment is a fixed follow-up that ignores the supplied note.
+ */
+resolver.define('previewDecisionNote', async ({ payload, context }) => {
+  const request = noteRequest(payload);
+  const invalid = noteProblem({ ...request, mode: 'generic' });
+  if (invalid) return { ok: false, error: invalid };
+  try {
+    const finding = await resolveFindingForIssue({ ...request, cloudId: context?.cloudId });
+    if (!finding.ok) return finding;
+    const composed = await composeNote({
+      candidate: finding.candidate,
+      projectKey: request.projectKey,
+      note: request.note || defaultNoteText(finding.candidate),
+      siteUrl: context?.siteUrl
+    });
+    const problem = noteProblem({ ...request, ...composed });
+    if (problem) return { ok: false, error: problem };
+    return { ok: true, ...previewOf(composed) };
+  } catch (error) {
+    console.error('Decision Drift Radar note preview failed', error?.name ?? 'error');
+    return { ok: false, error: 'Could not prepare the comment preview. Try again.' };
+  }
+});
+
+/**
+ * The app's only Jira write: posts one reviewed note as a comment, as the signed-in user.
+ * Requires a finding already marked relevant and the digest of the preview the person confirmed;
+ * the server rebuilds the comment and posts only if it is still exactly what was previewed.
+ * Records the comment so it is not posted twice.
+ */
+resolver.define('applyDecisionNote', async ({ payload, context }) => {
+  const request = noteRequest(payload);
+  const invalid = noteProblem({ ...request, mode: 'generic' });
+  if (invalid) return { ok: false, error: invalid };
   if (!context?.accountId) {
     return { ok: false, error: 'Your Atlassian account could not be identified. Sign in and try again.' };
   }
@@ -169,15 +214,51 @@ resolver.define('applyDecisionNote', async ({ payload, context }) => {
     }
     const finding = await resolveFindingForIssue({ ...request, cloudId: context.cloudId });
     if (!finding.ok) return finding;
-    const evidence = noteEvidence(finding.candidate, context.siteUrl);
-    if (evidence.quote !== request.quote) {
-      return { ok: false, error: 'The decision evidence changed. Refresh the scan and review the new evidence before posting.' };
+    const composed = await composeNote({ candidate: finding.candidate, projectKey: request.projectKey, note: request.note, siteUrl: context.siteUrl });
+    const problem = noteProblem({ ...request, ...composed });
+    if (problem) return { ok: false, error: problem };
+    if (!request.digest || request.digest !== composed.digest) {
+      return {
+        ok: false,
+        error: 'The comment changed since you previewed it, so nothing was posted. Check the new preview before posting.',
+        preview: previewOf(composed)
+      };
     }
-    return await postNote({ ...request, ...evidence, siteUrl: context.siteUrl });
+    return await postNote({ ...request, body: composed.body });
   } catch (error) {
-    console.error('Decision Drift Radar note failed', error);
+    console.error('Decision Drift Radar note failed', error?.name ?? 'error');
     return { ok: false, error: 'Could not add the note. Check the issue before trying again, in case the comment was posted.' };
   }
+});
+
+/**
+ * The comment a sample finding would get, built from the bundled sample only. Reads and writes
+ * nothing on the site: no review is saved and nothing is posted. Uses the same sharing rule as a
+ * real project: a sample Jira comment can be quoted, a sample Confluence page cannot.
+ */
+resolver.define('previewSampleNote', async ({ payload }) => {
+  const candidateId = String(payload?.candidateId ?? '');
+  const issueKey = String(payload?.issueKey ?? '').toUpperCase();
+  const { candidates } = analyze(sampleSources, sampleIssues);
+  const candidate = candidates.find((c) => c.id === candidateId);
+  if (!candidate || !candidate.affectedIssues.some((a) => a.issueKey === issueKey)) {
+    return { ok: false, error: 'This sample finding does not point at that issue.' };
+  }
+  const quoted = candidate.source.type === 'jira_comment' || candidate.source.type === 'jira_issue';
+  const mode = quoted ? 'quoted' : 'generic';
+  const note = quoted ? String(payload?.note ?? '').trim() || defaultNoteText(candidate) : GENERIC_NOTE;
+  const { text } = noteComment({ mode, note, quote: candidate.evidence.quote, sourceTitle: candidate.source.title, sourceUrl: null });
+  return {
+    ok: true,
+    sample: true,
+    mode,
+    text,
+    digest: createHash('sha256').update(text).digest('hex').slice(0, 32),
+    note,
+    explanation: quoted
+      ? 'Sample only: this decision comes from a Jira comment in the same project, so on a real project the comment can quote it.'
+      : 'Sample only: this decision comes from a Confluence page, so on a real project the app posts this fixed follow-up instead of quoting, naming or linking the page.'
+  };
 });
 
 function panelDraftContext(payload, context) {
@@ -199,9 +280,10 @@ resolver.define('getRovoDraft', async ({ payload, context }) => {
 resolver.define('postRovoDraft', async ({ payload, context }) => {
   const input = panelDraftContext(payload, context);
   const id = String(payload?.draftId ?? '');
+  const digest = String(payload?.digest ?? '');
   if (!input || !/^[a-f0-9-]{36}$/.test(id)) return { ok: false, error: 'Could not identify this draft. Reload the panel and try again.' };
   try {
-    return await confirmRovoDraft(input, id);
+    return await confirmRovoDraft(input, id, digest);
   } catch {
     return { ok: false, error: 'Could not verify that the note posted. Check the issue before trying again.' };
   }
@@ -222,6 +304,10 @@ resolver.define('draftDecisionNote', async ({ payload, context }) => {
   try {
     const finding = await resolveFindingForIssue({ projectKey, issueKey, candidateId, cloudId: context.cloudId });
     if (!finding.ok) return finding;
+    // A drafted note quotes or paraphrases the source, so it is only offered when the comment may.
+    if (!(await sourceSharing(finding.candidate, projectKey)).quoted) {
+      return { ok: false, error: `This decision's source cannot be quoted on ${issueKey}, so the app posts a fixed follow-up instead and there is nothing to draft.` };
+    }
     const drafted = await draftNoteWithAi(finding);
     if (!drafted.ok) return drafted;
     const suggestion = drafted.suggestion

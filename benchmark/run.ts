@@ -2,7 +2,7 @@
  * Accuracy benchmark for the rule-based extractor (src/domain) on real, openly licensed meeting
  * notes. Run: npm run benchmark. Prints a summary and writes benchmark/RESULTS.md.
  *
- * Three sets: development notes used for tuning, held-out notes, and a decisions-only recall
+ * Four sets: development notes used for tuning, held-out notes, and a decisions-only recall
  * set. Each is scored with the current rules and the rules before tuning (git ref BASELINE_REF).
  * Complete recorded AI results add a combined score using the same labels and matching rules.
  *
@@ -19,6 +19,8 @@ import { pathToFileURL } from 'node:url';
 import { normalize, prepareMarkdown } from './prepare.ts';
 
 const BASELINE_REF = 'd04822a';
+/** The rules as they were on origin/main before the commitment-vs-opinion change. */
+const MAIN_REF = 'fa2a139';
 
 type Kind = 'decision' | 'open_question' | 'proposal';
 interface Label { kind: Kind; text: string; ambiguous?: boolean }
@@ -35,6 +37,7 @@ const KIND_NAME: Record<Kind, string> = { decision: 'Decisions', open_question: 
 /** `kinds` limits which findings are scored (the recall set labels decisions only). */
 const SETS: Array<{ name: string; dir: string; labels: string; sources: string; kinds?: Kind[] }> = [
   { name: 'Recall set (decisions only, labels frozen before any run)', dir: 'recall', labels: 'labels-recall.json', sources: 'sources-recall.tsv', kinds: ['decision'] },
+  { name: 'Fresh set (labels frozen before any run; used once for the commitment-vs-opinion change)', dir: 'fresh', labels: 'labels-fresh.json', sources: 'sources-fresh.tsv' },
   { name: 'Held-out set', dir: 'heldout', labels: 'labels-heldout.json', sources: 'sources-heldout.tsv' },
   { name: 'Development set (used for tuning)', dir: 'corpus', labels: 'labels.json', sources: 'sources.tsv' }
 ];
@@ -110,10 +113,10 @@ function score(set: (typeof SETS)[number], extract: Extract, ai = new Map<string
 }
 
 /** The extractor as it was at BASELINE_REF, copied to a temporary directory. */
-async function baselineExtractor(): Promise<Extract> {
+async function baselineExtractor(ref = BASELINE_REF): Promise<Extract> {
   const dir = mkdtempSync(join(tmpdir(), 'ddr-baseline-'));
   for (const file of ['extractDecisions.ts', 'matchIssues.ts', 'decisionTypes.ts']) {
-    writeFileSync(join(dir, file), execFileSync('git', ['show', `${BASELINE_REF}:src/domain/${file}`]));
+    writeFileSync(join(dir, file), execFileSync('git', ['show', `${ref}:src/domain/${file}`]));
   }
   return (await import(pathToFileURL(join(dir, 'extractDecisions.ts')).href)).extractDecisions;
 }
@@ -129,6 +132,13 @@ try {
   baseline = await baselineExtractor();
 } catch {
   console.warn(`Could not load the baseline rules from git ref ${BASELINE_REF}; showing current rules only.`);
+}
+
+let main: Extract | null = null;
+try {
+  main = await baselineExtractor(MAIN_REF);
+} catch {
+  console.warn(`Could not load the rules from git ref ${MAIN_REF}; skipping the old-vs-new table.`);
 }
 
 const lines = [
@@ -180,6 +190,19 @@ for (const set of SETS) {
     continue;
   }
   summary.push(`${set.name}: anything flagged ${before ? pair(before.any) : 'n/a'} → ${pair(after.any)}; decisions ${before ? pair(before.byKind.decision) : 'n/a'} → ${pair(after.byKind.decision)} (precision / recall)`);
+}
+if (main) {
+  lines.push('## Old vs new rules (counts)', '', `Old = the rules at \`${MAIN_REF}\` (origin/main before the commitment-vs-opinion change); new = the current rules. TP = true positives, FP = false positives (wrong kind counts as a false positive for the kind found), FN = misses. "Decisions" scores decision findings against decision labels; "Anything flagged" ignores kind. The recall set labels decisions only. Ambiguous matches are findings that matched an ambiguous label and are excluded.`, '');
+  lines.push('| Set | Measure | Rules | TP | FP | FN | Precision / recall | Ambiguous matches excluded |', '| --- | --- | --- | ---: | ---: | ---: | --- | ---: |');
+  for (const set of SETS) {
+    for (const [label, rules] of [['old', main], ['new', current]] as const) {
+      const r = score(set, rules);
+      const rows: Array<[string, Tally]> = [['Decisions', r.byKind.decision]];
+      if (!set.kinds) rows.push(['Anything flagged', r.any]);
+      for (const [measure, t] of rows) lines.push(`| ${set.dir} | ${measure} | ${label} | ${t.tp} | ${t.fp} | ${t.fn} | ${pair(t)} | ${r.ignored} |`);
+    }
+  }
+  lines.push('');
 }
 lines.push('## Sources', '');
 for (const set of SETS) {

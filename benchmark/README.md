@@ -74,6 +74,14 @@ The background run used Forge development 6.17.0 with `claude-sonnet-5`, one pub
 
 The recall set scores decisions only. On the held-out set, across all finding kinds with kind ignored, precision fell from 69% to 49% and recall rose from 78% to 84%. Across all kinds, all 35 recall-set and 50 held-out AI suggestions passed the exact-quote check. This check establishes that the quote exists in the source. Whether it records a real decision is a separate judgement. The held-out comparison supports keeping AI optional and visibly labelled.
 
+## Commitment vs opinion change and the fresh set
+
+The rules were changed to separate a team commitment from nearby things that look like one. Changes in `src/domain/extractDecisions.ts`: a sentence that says an earlier decision was reversed, withdrawn or rescinded is no longer reported ("The decision to adopt Postgres was reversed"); a hedged personal view on a transcript line ("josh: I think we agreed to ship it") or a condition or future decision ("once we agree", "we will decide next week") is no longer a decision (at most a proposal); and a speaker's question that the next speaker replies to straight away is no longer an open question. Explicit labels ("Decision:", "Agreed:") are never downgraded. These were developed against `corpus/` and `src/domain/fixtures` only. The 27 fixture checks and their golden output are unchanged; one check was added.
+
+**Protocol.** Before running any rules on it, a fresh set was prepared by the same selection rule (next-oldest minutes from the same public sources): OpenJS CPC 2025-04-01, 03-18, 03-04, 02-18; Rust language team 2022-11-01; Polonius working group 2019-04-23 and 03-07 (only two older files exist). The third Polonius slot is filled by the next-oldest language team minutes, 2022-10-25, a rule stated after the Polonius folder ran out. Files are unmodified (MIT and Apache-2.0; commits in [sources-fresh.tsv](sources-fresh.tsv)), labelled by hand in [labels-fresh.json](labels-fresh.json) with the same protocol as the held-out set, and frozen with the time and SHA-256 in [fresh/FROZEN.txt](fresh/FROZEN.txt). Then the old rules (`fa2a139`, origin/main) and the new rules were run on it once, and the rules were not changed afterwards. The held-out and recall sets were not used for tuning; the new rules' held-out score was seen after the change was written. [RESULTS.md](RESULTS.md) has the old-vs-new counts table for all four sets.
+
+**Reading it.** The fresh set has only 9 strict labels (5 decisions) and 76 ambiguous ones, so it says little about decision recall. Its main signal is false alarms: 13 to 10 findings, mostly transcript questions that are answered in the notes. Decision precision and recall are unchanged on every set (100% precision throughout); recall on decisions did not improve. On the development set one correctly labelled open question ("Is it a blocker?") was lost to the answered-question rule. Nothing got worse on the held-out or recall sets. The answered-question rule only catches a question that ends its speaker's line and is followed by another speaker; several fresh false alarms are questions in the middle of a line or followed by the same speaker, and remain.
+
 ## Corpus
 
 Files were chosen by a fixed rule decided before reading them: the most recent minutes in each source folder for the development set, then the next-oldest for the held-out set.
@@ -92,7 +100,7 @@ Files were chosen by a fixed rule decided before reading them: the most recent m
 
 The traits working group has only three minutes files, so the held-out set takes its three prose summaries from the Polonius working group instead. That rule was stated before reading them: the next working group in the same repository with the most minutes.
 
-Files are unmodified copies. [sources.tsv](sources.tsv), [sources-heldout.tsv](sources-heldout.tsv) and [sources-recall.tsv](sources-recall.tsv) record each source path and commit, and `corpus/LICENSES/` holds the licences. Copyright remains with the original authors: the OpenJS Foundation and contributors, and the Rust project contributors.
+Files are unmodified copies. [sources.tsv](sources.tsv), [sources-heldout.tsv](sources-heldout.tsv), [sources-recall.tsv](sources-recall.tsv) and [sources-fresh.tsv](sources-fresh.tsv) record each source path and commit, and `corpus/LICENSES/` holds the licences. Copyright remains with the original authors: the OpenJS Foundation and contributors, and the Rust project contributors.
 
 ## Method
 

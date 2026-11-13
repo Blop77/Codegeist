@@ -8,12 +8,16 @@ Decision Drift Radar helps teams catch decisions recorded in Confluence or Jira 
 
 ## Try it
 
+**Judges: start here.** In Jira, open **Apps → Decision Drift Radar** and select **Try with sample data**. It takes about one minute and needs no data setup. You should see the banner "Sample data: a fictional payments team", the line "Scanned 8 sample issues and 3 sample Confluence pages.", and the counts **Decisions · 5**, **Open questions · 2** and **Proposals · 1**. The sample is fictional and labelled as sample data in the app; it is not a result from your site. The full expected results are in [Part 1 of the testing instructions](docs/testing-instructions.md#part-1-see-it-in-one-minute-sample-data-no-setup).
+
+If the app is not on your site yet, install it first:
+
 **[Install Decision Drift Radar on your Atlassian site](https://developer.atlassian.com/console/install/68a157f1-8d36-4681-ad80-656a45181b6a?signature=AYABeErQrktzFiwiP0JBC0WC3lIAAAADAAdhd3Mta21zAEthcm46YXdzOmttczp1cy13ZXN0LTI6NzA5NTg3ODM1MjQzOmtleS83MDVlZDY3MC1mNTdjLTQxYjUtOWY5Yi1lM2YyZGNjMTQ2ZTcAuAECAQB4CxqLTo9l4lqXuFjNim1xJM%2Bp%2F3TVP9xHS2BrU5DRRucBL6%2BHB6IcT2W5B6PYJtfwSgAAAH4wfAYJKoZIhvcNAQcGoG8wbQIBADBoBgkqhkiG9w0BBwEwHgYJYIZIAWUDBAEuMBEEDFYEFTpntWYOhX%2BLDwIBEIA7t7oDfDaRrRCxVKZubC4B7RA97rAkfVk%2FnBHm30DkUpGgmZO5LjiMRcEQKdQr%2F8NGA4JfBbz7veBJfCoAB2F3cy1rbXMAS2Fybjphd3M6a21zOmV1LXdlc3QtMTo3MDk1ODc4MzUyNDM6a2V5LzQ2MzBjZTZiLTAwYzMtNGRlMi04NzdiLTYyN2UyMDYwZTVjYwC4AQICAHi9bVMAkme4qVQX1fQHo6ePw3H40A7cGfz7yrmSfBWMXgFFUfSUfE0TtKWq%2BEgaVIIXAAAAfjB8BgkqhkiG9w0BBwagbzBtAgEAMGgGCSqGSIb3DQEHATAeBglghkgBZQMEAS4wEQQMA8HAfzMzNyXQzYniAgEQgDsRW2ABoyiQYKniXglzhfW9UWoWrX6FhadL5gn6JMbPYOXHZa7oZ%2B4S0cAL2Sns33x%2F8xHUQye65iXv8wAHYXdzLWttcwBLYXJuOmF3czprbXM6dXMtZWFzdC0xOjcwOTU4NzgzNTI0MzprZXkvNmMxMjBiYTAtNGNkNS00OTg1LWI4MmUtNDBhMDQ5NTJjYzU3ALgBAgIAeDYASx0XCjkny4iLV6vz%2BKtEGSGT6kdt0QRpkn6D%2FlVEAbS4b6dRAYV%2FLK6Q23vA0jsAAAB%2BMHwGCSqGSIb3DQEHBqBvMG0CAQAwaAYJKoZIhvcNAQcBMB4GCWCGSAFlAwQBLjARBAxHOKip3ek9xrrZpT8CARCAO%2FH4QqO82%2FBmgzDOvCFDwMa2qz3D%2Bz473b85tV%2FO%2BOLZBDWbyywsCEuX2XEQqNiU3VnmEBFasYJJBAE8AgAAAAAMAAAQAAAAAAAAAAAAAAAAACYgLikmR2W48JXlIXvTTyf%2F%2F%2F%2F%2FAAAAAQAAAAAAAAAAAAAAAQAAADJVn7ZYE%2Fz30hEDuvLgQQ%2BeF6C65RMfI0M1pqA8yP5N5eSVTAt4EK9WoBB2UpvHdH93fFBCl2wMoomDux9tUp6U6VE%3D&product=jira&product=confluence)**
 
 You need to be an admin of a site with Jira and Confluence. Install into Jira, then open the link again to connect Confluence on the same site.
 
-- **No setup:** in Jira, open **Apps → Decision Drift Radar** and select **Try with sample data** to see a full scan of a small bundled project. The baseline sample does not read or change Jira or Confluence data. Its optional AI pass stores usage counters in Forge storage.
-- **With your own data:** follow the [testing instructions](docs/testing-instructions.md). It takes about five minutes and includes copy-paste text.
+- **Sample data (no setup):** [Part 1 of the testing instructions](docs/testing-instructions.md). The baseline sample does not read or change Jira or Confluence data. Its optional AI pass stores usage counters in Forge storage.
+- **Your own data:** [Parts 2 and 3 of the testing instructions](docs/testing-instructions.md) use your own Jira project and Confluence pages. Part 3 also needs a team of your own, linked to the project and a space in Teamwork Graph. Both include copy-paste text.
 
 The link installs the production build. The app sends no data outside Atlassian; see the [privacy policy](docs/privacy.md).
 

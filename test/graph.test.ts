@@ -62,7 +62,7 @@ test('success: team, space, team-space page and linked page are all reported', a
       : () => json({ results: [page('300', 'Meeting notes', 'LT', 'Notes.')] }))
   });
   const { pages, summary } = await discoverViaGraph({ ...base, knownPageIds: ['100'] });
-  assert.deepEqual(summary.status, { teams: 'found', spaces: 'found', spacePages: 'ok', linkedPages: 'ok' });
+  assert.deepEqual(summary.status, { teams: 'found', spaces: 'found', spacePages: 'ok', linkedPages: 'ok', overall: 'ok' });
   assert.equal(summary.used, true);
   assert.deepEqual(summary.teams, ['Launch team']);
   assert.deepEqual(summary.spaces, ['Launch']);
@@ -84,8 +84,9 @@ test('actual absence: a well-formed empty answer on every attempt means no linke
   assert.equal(summary.status.spaces, 'skipped');
   assert.equal(summary.status.linkedPages, 'ok', 'linked pages of key-search pages are still read');
   assert.equal(pages.length, 0);
-  assert.match(summary.note, /shows no Atlassian team linked to KAN/);
-  assert.match(summary.note, /may not show yet/);
+  assert.equal(summary.status.overall, 'no_team');
+  assert.match(summary.note, /^No team linked: Teamwork Graph answered clearly that no Atlassian team is linked to KAN/);
+  assert.match(summary.note, /Link a team to the project/);
   assert.doesNotMatch(summary.note, /could not be reached/);
 });
 
@@ -94,8 +95,10 @@ test('uncertain: a missing field, a partial-error answer or a failed attempt is 
   let { summary } = await discoverViaGraph(base);
   assert.equal(summary.status.teams, 'uncertain');
   assert.equal(summary.used, false);
-  assert.match(summary.note, /no usable answer about teams linked to KAN/);
-  assert.doesNotMatch(summary.note, /shows no Atlassian team/);
+  assert.equal(summary.status.overall, 'unavailable');
+  assert.match(summary.note, /^Teamwork Graph temporarily unavailable: it gave no usable answer about teams linked to KAN after 4 tries/);
+  assert.match(summary.note, /Scan again in a minute\./);
+  assert.doesNotMatch(summary.note, /No team linked/);
 
   mock({ teams: () => () => json({ data: { atlassianTeamsBySpace: null }, errors: [{ message: 'internal field error' }] }) });
   ({ summary } = await discoverViaGraph(base));
@@ -115,10 +118,11 @@ test('unreachable: every team lookup failing reports the HTTP status and still r
     search: () => () => json({ results: [page('300', 'Meeting notes', 'LT', 'Notes.')] })
   });
   const { pages, summary } = await discoverViaGraph({ ...base, knownPageIds: ['100'] });
-  assert.equal(calls.teams, 3);
+  assert.equal(calls.teams, 4);
   assert.equal(summary.status.teams, 'error');
+  assert.equal(summary.status.overall, 'unavailable');
   assert.equal(summary.used, false);
-  assert.match(summary.note, /Teamwork Graph could not be reached \(HTTP 500\), so no team spaces were searched/);
+  assert.match(summary.note, /^Teamwork Graph temporarily unavailable \(HTTP 500\): the team lookup failed after 4 tries, so no team spaces were searched\. Scan again in a minute\./);
   assert.equal(summary.status.linkedPages, 'ok');
   assert.equal(summary.linkedPagesAdded, 1);
   assert.equal(pages.length, 1);
@@ -132,13 +136,13 @@ test('Confluence 403 after teams and spaces succeed keeps what Graph found and n
     search: () => () => json({ message: 'forbidden' }, 403)
   });
   const { pages, summary } = await discoverViaGraph({ ...base, knownPageIds: ['100'] });
-  assert.deepEqual(summary.status, { teams: 'found', spaces: 'found', spacePages: 'error', linkedPages: 'ok' });
+  assert.deepEqual(summary.status, { teams: 'found', spaces: 'found', spacePages: 'error', linkedPages: 'ok', overall: 'partial' });
   assert.equal(summary.used, true);
   assert.deepEqual(summary.teams, ['Launch team']);
   assert.deepEqual(summary.spaces, ['Launch']);
   assert.equal(pages.length, 0);
-  assert.equal(summary.note, 'Teamwork Graph found Launch, but Confluence could not search it (HTTP 403), so no decision pages were added from team spaces.');
-  assert.doesNotMatch(summary.note, /could not be reached/);
+  assert.equal(summary.note, 'Partial results: Teamwork Graph found Launch, but Confluence could not search it (HTTP 403), so no decision pages were added from team spaces. Scan again in a minute.');
+  assert.equal(summary.status.overall, 'partial');
   assert.deepEqual(calls.links, ['100'], 'the linked-page stage still runs');
 });
 
@@ -158,7 +162,7 @@ test('one failing linked origin does not stop the others', async () => {
   assert.equal(summary.status.linkedPages, 'partial');
   assert.equal(summary.linkedPagesAdded, 2);
   assert.deepEqual(pages.map((p: any) => p.id), ['page-201', 'page-203']);
-  assert.match(summary.note, /Could not read Teamwork Graph links from 1 of 3 decision pages \(HTTP 500\)\./);
+  assert.match(summary.note, /Partial results: could not read Teamwork Graph links from 1 of 3 decision pages \(HTTP 500\)\./);
 });
 
 test('empty linked-page answers are not retried', async () => {
@@ -181,7 +185,7 @@ test('one team failing still uses the other team\'s spaces', async () => {
   assert.deepEqual(summary.spaces, ['Launch']);
   assert.equal(summary.pagesAdded, 1);
   assert.equal(pages.length, 1);
-  assert.match(summary.note, /Could not read the Confluence spaces of 1 of 2 linked teams \(HTTP 502\)\./);
+  assert.match(summary.note, /Partial results: could not read the Confluence spaces of 1 of 2 linked teams \(HTTP 502\)\./);
 });
 
 test('no site or project id: nothing is queried', async () => {
@@ -189,6 +193,99 @@ test('no site or project id: nothing is queried', async () => {
   const { pages, summary } = await discoverViaGraph({ projectKey: 'KAN', projectId: null, cloudId: 'cloud-1' });
   assert.equal(calls.teams, 0);
   assert.equal(pages.length, 0);
-  assert.deepEqual(summary.status, { teams: 'skipped', spaces: 'skipped', spacePages: 'skipped', linkedPages: 'skipped' });
+  assert.deepEqual(summary.status, { teams: 'skipped', spaces: 'skipped', spacePages: 'skipped', linkedPages: 'skipped', overall: 'unavailable' });
   assert.match(summary.note, /was not queried/);
+});
+
+test('team lookup: no usable answer first, then found on the retry', async () => {
+  let attempt = 0;
+  const calls = mock({
+    teams: () => (attempt++ === 0 ? () => json({ data: { atlassianTeamsBySpace: null }, errors: [{ message: 'Secret Title' }] }) : ok({ atlassianTeamsBySpace: edges([team('ari:team/1', 'Launch team')]) })),
+    spaces: () => ok({ spacesByAtlassianTeam: edges([space('LT', 'Launch')]) })
+  });
+  const { summary } = await discoverViaGraph(base);
+  assert.equal(calls.teams, 2);
+  assert.equal(summary.status.teams, 'found');
+  assert.equal(summary.status.overall, 'ok');
+  assert.deepEqual(summary.teams, ['Launch team']);
+  assert.equal(summary.note, null);
+});
+
+test('team lookup: found only on the extra patient attempt', async () => {
+  let attempt = 0;
+  const calls = mock({ teams: () => (++attempt < 4 ? () => json({ data: {} }) : ok({ atlassianTeamsBySpace: edges([team('ari:team/1', 'Launch team')]) })) });
+  const { summary } = await discoverViaGraph(base);
+  assert.equal(calls.teams, 4);
+  assert.equal(summary.status.teams, 'found');
+});
+
+test('team lookup unavailable on every attempt is unavailable, not "no team linked"', async () => {
+  const calls = mock({ teams: () => () => json({ data: {}, errors: [{ message: 'x' }] }) });
+  const { summary } = await discoverViaGraph(base);
+  assert.equal(calls.teams, 4);
+  assert.equal(summary.status.overall, 'unavailable');
+  assert.doesNotMatch(summary.note, /No team linked/);
+  assert.match(summary.note, /temporarily unavailable.*Scan again in a minute/);
+});
+
+test('a partial linked-page answer is retried; earlier pages are kept when a later origin fails', async () => {
+  let first = 0;
+  const calls = mock({
+    teams: () => ok({ atlassianTeamsBySpace: edges([team('ari:team/1', 'Launch team')]) }),
+    spaces: () => ok({ spacesByAtlassianTeam: edges([space('LT', 'Launch')]) }),
+    links: (v) => {
+      const origin = String(v.pageAri).split('/').pop();
+      if (origin === '200') return fail(500);
+      if (first++ === 0) return () => json({ data: { confluencePageLinkedConfluencePages: edges([linked('300')]) }, errors: [{ message: 'partial' }] });
+      return ok({ confluencePageLinkedConfluencePages: edges([linked('300')]) });
+    },
+    search: (cql) => () => json({ results: cql.includes('space in') ? [page('200', 'Team decisions', 'LT', 'Decision: ship weekly.')] : [page('300', 'Meeting notes', 'LT', 'Notes.')] })
+  });
+  const { pages, summary } = await discoverViaGraph({ ...base, knownPageIds: ['100'] });
+  assert.equal(calls.links.filter((o) => o === '100').length, 2, 'partial answer retried once, clean answer accepted');
+  assert.equal(summary.pagesAdded, 1, 'team-space page from the earlier stage is kept');
+  assert.equal(summary.linkedPagesAdded, 1);
+  assert.deepEqual(pages.map((p: any) => p.id), ['page-200', 'page-300']);
+  assert.equal(summary.status.linkedPages, 'partial');
+  assert.equal(summary.status.overall, 'partial');
+  assert.match(summary.note, /Partial results: could not read Teamwork Graph links from 1 of 2 decision pages \(HTTP 500\)\. Scan again in a minute\./);
+});
+
+test('deadline reached mid-scan: no new lookups, earlier pages kept, note says stopped early', async () => {
+  const deadline = Date.now() + 60_000;
+  const calls = mock({
+    teams: () => ok({ atlassianTeamsBySpace: edges([team('ari:team/1', 'Launch team')]) }),
+    spaces: () => ok({ spacesByAtlassianTeam: edges([space('LT', 'Launch')]) }),
+    search: () => () => { Date.now = () => deadline + 1; return json({ results: [page('200', 'Team decisions', 'LT', 'Decision: ship weekly.')] }); }
+  });
+  const realNow = Date.now;
+  try {
+    const { pages, summary } = await discoverViaGraph({ ...base, knownPageIds: ['100'], deadline });
+    assert.equal(pages.length, 1);
+    assert.equal(summary.pagesAdded, 1);
+    assert.deepEqual(calls.links, [], 'no linked-page lookup started after the deadline');
+    assert.equal(summary.status.overall, 'partial');
+    assert.match(summary.note, /stopped early/);
+  } finally { Date.now = realNow; }
+});
+
+test('diagnostic logs carry only stage, status, code and attempts: no titles, names or error text', async () => {
+  const warnings: string[] = [];
+  const realWarn = console.warn;
+  console.warn = (...args: unknown[]) => { warnings.push(args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')); };
+  try {
+    mock({
+      teams: () => () => json({ data: {}, errors: [{ message: 'Confidential Roadmap Title' }] }),
+      links: () => () => json({ data: null, errors: [{ message: 'Confidential Roadmap Title' }] }),
+      search: () => () => json({ results: [page('300', 'Confidential Roadmap Title', 'LT', 'Body.')] })
+    });
+    await discoverViaGraph({ ...base, knownPageIds: ['100'] });
+    mock({ teams: () => fail(500), links: () => fail(503) });
+    await discoverViaGraph({ ...base, knownPageIds: ['100'] });
+  } finally { console.warn = realWarn; }
+  assert.ok(warnings.length >= 2);
+  for (const line of warnings) {
+    assert.doesNotMatch(line, /Confidential|Roadmap|Launch|Error:/);
+    assert.match(line, /^Decision Drift Radar Teamwork Graph stage=\w+ status=\w+ code=\w+ attempts=\w+$/);
+  }
 });
