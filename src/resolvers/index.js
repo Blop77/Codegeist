@@ -1,7 +1,7 @@
 import Resolver from '@forge/resolver';
 import api, { route, storage } from '@forge/api';
 import { toIssueSummary } from './normalize';
-import { analyze, resolveFindingForIssue, safeError, scanIssue, scanProject, validProjectKey } from './scan';
+import { analyze, readIssueRecord, resolveFindingForIssue, safeError, scanIssue, scanProject, validProjectKey } from './scan';
 import { SAMPLE_GRAPH, SAMPLE_PROJECT_KEY, sampleIssues, sampleSources } from './sample-data';
 import { draftNoteWithAi, findWithAi } from './ai';
 import { confirmRovoDraft, loadRovoDraft } from './rovo-drafts';
@@ -34,7 +34,8 @@ resolver.define('getProjectRadar', async ({ payload, context }) => {
       candidates: reviewed,
       issueRecords: scanned.issueRecords,
       previousVisitAt,
-      observedAt: scanned.readAt
+      observedAt: scanned.readAt,
+      confirmIssue: (issueKey) => readIssueRecord(issueKey, projectKey)
     });
     await saveVisit(context?.accountId, projectKey);
     const candidates = tracked.candidates.slice(0, extractedCandidates.length);

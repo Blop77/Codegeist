@@ -66,8 +66,12 @@ test('applyScan opens, keeps, resolves and reopens drifts only on evidence', () 
   assert.equal(first.radar.findings.dc_a.firstSeenAt, 't1');
   assert.equal(first.radar.drifts['dc_a:DD-1'].status, 'open');
 
-  const same = applyScan(first.radar, { candidates: [finding('dc_a', [outdated('DD-1', 'separate channel plans')])], issueRecords: [staleIssue], now: 't2' });
-  assert.equal(same.changed, false, 'a repeat scan writes nothing');
+  const same = applyScan(first.radar, { candidates: [finding('dc_a', [outdated('DD-1', 'separate channel plans')])], issueRecords: [staleIssue], now: 't2', observedAt: 't1' });
+  assert.equal(same.changed, false, 'a repeat of the same observation writes nothing');
+  const confirmed = applyScan(first.radar, { candidates: [finding('dc_a', [outdated('DD-1', 'separate channel plans')])], issueRecords: [staleIssue], now: 't2' });
+  assert.equal(confirmed.changed, true, 'a newer scan that confirms the drift records its observation time');
+  assert.equal(confirmed.radar.drifts['dc_a:DD-1'].observedAt, 't2');
+  assert.equal(confirmed.radar.drifts['dc_a:DD-1'].status, 'open');
 
   const findingMissing = applyScan(first.radar, { candidates: [], issueRecords: [staleIssue], now: 't2' });
   assert.equal(findingMissing.radar.drifts['dc_a:DD-1'].status, 'open', 'a finding the scan did not return is not resolved');

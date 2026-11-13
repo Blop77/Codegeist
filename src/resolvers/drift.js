@@ -19,7 +19,7 @@ import { adfToText } from './normalize';
 const MAX_FINDINGS = 300;
 const MAX_DRIFTS = 300;
 
-/** The pre-entity record, read once to seed the versioned state. Never written any more. */
+/** The pre-entity record: read once to seed the versioned state, then deleted. */
 const legacyRadarKey = (projectKey) => `radar:${projectKey}`;
 const visitKey = (accountId, projectKey) => `visit:${createHash('sha256').update(accountId).digest('hex')}:${projectKey}`;
 const driftId = (findingId, issueKey) => `${findingId}:${issueKey}`;
@@ -34,8 +34,12 @@ const emptyRadar = () => ({ findings: {}, drifts: {} });
  */
 const STATE_ENTITY = 'radar-state';
 const stateKey = (projectKey) => `radar-state:${projectKey}`;
-const MAX_WRITE_ATTEMPTS = 6;
+const MAX_WRITE_ATTEMPTS = 8;
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Exponential backoff with full jitter: up to 50 ms, 100 ms, … capped at 1.6 s. */
+const backoff = (attempt) => Math.floor(Math.random() * Math.min(1600, 50 * 2 ** (attempt - 1)));
+/** Error name and code only, never the message, which could carry stored content. */
+const errorLabel = (error) => `${error?.name ?? 'Error'}${error?.code ? ` ${error.code}` : ''}`;
 
 const asRadar = (value) => ({ findings: value?.findings ?? {}, drifts: value?.drifts ?? {} });
 
@@ -80,13 +84,22 @@ export async function updateRadar(projectKey, change) {
     if (!result.changed && !state.migrating) return result.radar;
     try {
       await writeState(projectKey, state, result.radar);
-      return result.radar;
     } catch (error) {
-      if (attempt >= MAX_WRITE_ATTEMPTS) throw error;
-      // Project key and attempt only: lets a real write conflict be seen in `forge logs`.
-      console.info(`Decision Drift Radar radar write retry: ${projectKey}, attempt ${attempt} of ${MAX_WRITE_ATTEMPTS}`);
-      await pause(25 * attempt + Math.floor(Math.random() * 25));
+      // The conflict error code is not documented, so every failed write is retried. Logs carry
+      // the project key, the attempt and the error name/code only.
+      if (attempt >= MAX_WRITE_ATTEMPTS) {
+        console.warn(`Decision Drift Radar radar write failed: ${projectKey}, ${errorLabel(error)}, after ${attempt} attempts`);
+        throw error;
+      }
+      console.info(`Decision Drift Radar radar write retry: ${projectKey}, attempt ${attempt} of ${MAX_WRITE_ATTEMPTS}, ${errorLabel(error)}`);
+      await pause(backoff(attempt));
+      continue;
     }
+    if (state.migrating) {
+      // The old single-key record has been copied into the entity; remove it so it isn't kept twice.
+      await kvs.delete(legacyRadarKey(projectKey)).catch(() => {});
+    }
+    return result.radar;
   }
 }
 
@@ -118,9 +131,12 @@ const newerThan = (drift, observedAt) => Boolean(drift.observedAt) && drift.obse
  *   the issue no longer uses the outdated wording. A finding or issue missing from the scan
  *   (permissions, the 50-issue window, a truncated list) changes nothing.
  * - `observedAt` is when the scan read the issues. A drift whose state was set by a later
- *   observation (for example the issue-update trigger) is not changed by an older one.
+ *   observation (for example the issue-update trigger) is not changed by an older one, and a scan
+ *   that confirms an open drift records its observation time.
+ * - `skipReopen` lists issues whose direct re-read showed the old wording is gone, so a stale
+ *   search result cannot reopen their drifts.
  */
-export function applyScan(radar, { candidates, issueRecords, now = new Date().toISOString(), observedAt = now }) {
+export function applyScan(radar, { candidates, issueRecords, now = new Date().toISOString(), observedAt = now, skipReopen = new Set() }) {
   const next = structuredClone(radar);
   let changed = false;
   const present = new Set();
@@ -143,7 +159,14 @@ export function applyScan(radar, { candidates, issueRecords, now = new Date().to
           status: 'open', firstSeenAt: now, observedAt
         };
         changed = true;
-      } else if (drift.status === 'resolved' && !newerThan(drift, observedAt)) {
+      } else if (drift.status === 'open') {
+        // A newer observation that confirms the drift moves its observation time forward, so an
+        // older scan or trigger that saves later cannot resolve it.
+        if (!drift.observedAt || drift.observedAt < observedAt) {
+          next.drifts[id] = { ...drift, observedAt };
+          changed = true;
+        }
+      } else if (drift.status === 'resolved' && !newerThan(drift, observedAt) && !skipReopen.has(affected.issueKey)) {
         next.drifts[id] = {
           findingId: candidate.id, issueKey: affected.issueKey, phrase: affected.outdatedWording,
           status: 'open', firstSeenAt: drift.firstSeenAt, reopenedAt: now, observedAt
@@ -216,16 +239,43 @@ export function radarSummary(described) {
  * Records a scan and returns the findings with radar state. Never fails the scan: if the radar
  * cannot be read or saved, findings are returned without it and `radarWarning` says so.
  */
-export async function trackScan(projectKey, { candidates, issueRecords, previousVisitAt = null, observedAt }) {
+export async function trackScan(projectKey, { candidates, issueRecords, previousVisitAt = null, observedAt, confirmIssue }) {
   try {
     const now = new Date().toISOString();
-    const radar = await updateRadar(projectKey, (current) => applyScan(current, { candidates, issueRecords, now, observedAt: observedAt ?? now }));
+    const skipReopen = confirmIssue ? await staleReopens(projectKey, candidates, confirmIssue) : new Set();
+    const radar = await updateRadar(projectKey, (current) => applyScan(current, { candidates, issueRecords, now, observedAt: observedAt ?? now, skipReopen }));
     const described = describeFindings(radar, { candidates, issueRecords, previousVisitAt });
     return { candidates: described, summary: radarSummary(described), radarWarning: null };
   } catch (error) {
-    console.warn('Decision Drift Radar could not update its drift record', error);
+    console.warn(`Decision Drift Radar could not update its drift record: ${projectKey}, ${errorLabel(error)}`);
     return { candidates, summary: null, radarWarning: 'Drift history is unavailable right now. The findings below are current.' };
   }
+}
+
+/**
+ * Issues this scan would reopen a resolved drift on, but whose current text, read directly with
+ * `confirmIssue(issueKey)`, no longer uses the old wording. Project scans read issues through JQL
+ * search, which can lag behind an edit; a direct read does not. Only issues about to be reopened
+ * are read, so this is usually no extra requests at all.
+ */
+async function staleReopens(projectKey, candidates, confirmIssue) {
+  const radar = await loadRadar(projectKey);
+  const phrases = new Map();
+  for (const candidate of candidates) {
+    for (const affected of candidate.affectedIssues ?? []) {
+      if (affected.wordingStatus !== 'outdated' || !affected.outdatedWording) continue;
+      if (radar.drifts[driftId(candidate.id, affected.issueKey)]?.status !== 'resolved') continue;
+      phrases.set(affected.issueKey, [...(phrases.get(affected.issueKey) ?? []), affected.outdatedWording]);
+    }
+  }
+  const stale = new Set();
+  for (const [issueKey, issuePhrases] of phrases) {
+    const current = await confirmIssue(issueKey);
+    if (current?.title && current.description !== undefined && !issuePhrases.some((phrase) => issueStillMentions(current, phrase))) {
+      stale.add(issueKey);
+    }
+  }
+  return stale;
 }
 
 /** When this person last opened the project's radar, or null. */
@@ -264,6 +314,7 @@ export async function onIssueUpdated(event) {
   if (!changedText) return { checked: 0, resolved: 0 };
 
   const projectKey = String(event?.issue?.fields?.project?.key ?? issueKey.split('-')[0]);
+  if (!/^[A-Z][A-Z0-9_]{1,9}$/.test(projectKey)) return { checked: 0, resolved: 0 };
   const openFor = (radar) => Object.entries(radar.drifts).filter(([, d]) => d.issueKey === issueKey && d.status === 'open');
   const open = openFor(await loadRadar(projectKey));
   if (open.length === 0) return { checked: 0, resolved: 0 };

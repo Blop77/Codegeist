@@ -67,6 +67,11 @@ export async function scanProject(projectKey, { cloudId } = {}) {
   );
   if (!jiraResponse.ok) return { ok: false, error: safeError(jiraResponse.status, 'Jira') };
   const rawIssues = (await jiraResponse.json()).issues ?? [];
+  // An old project key can still find the renamed project's issues; keep its history under one key.
+  const actualProjectKey = rawIssues[0]?.fields?.project?.key;
+  if (actualProjectKey && actualProjectKey !== projectKey) {
+    return { ok: false, error: `Project ${projectKey} is now ${actualProjectKey}. Scan ${actualProjectKey} instead.` };
+  }
   const projectId = rawIssues[0]?.fields?.project?.id ?? null;
   const { pages, warnings, graph } = await projectPages(projectKey, projectId, cloudId);
 
@@ -86,6 +91,10 @@ export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
   const issueResponse = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}?fields=${ISSUE_FIELDS}`);
   if (!issueResponse.ok) return { ok: false, error: safeError(issueResponse.status, 'Jira issue lookup') };
   const rawIssue = await issueResponse.json();
+  // Jira answers an old key with the moved issue; record its history under its current key only.
+  if (rawIssue.key !== issueKey || (rawIssue.fields?.project?.key ?? projectKey) !== projectKey) {
+    return { ok: false, error: `${issueKey} has moved to ${rawIssue.key}. Open ${rawIssue.key} instead.` };
+  }
   const { pages, warnings, graph } = await projectPages(projectKey, rawIssue.fields?.project?.id ?? null, cloudId);
 
   const sources = [...pages, ...issueSources(rawIssue, projectKey)];
@@ -106,6 +115,18 @@ export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
     aiCandidates: ai.candidates.filter(pointsHere),
     notice
   };
+}
+
+/**
+ * One issue's current summary and description, read directly as the user (strongly consistent,
+ * unlike JQL search). Null when it can't be read or has moved.
+ */
+export async function readIssueRecord(issueKey, projectKey) {
+  const response = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}?fields=summary,description,project,updated`);
+  if (!response.ok) return null;
+  const rawIssue = await response.json();
+  if (rawIssue.key !== issueKey || (rawIssue.fields?.project?.key ?? projectKey) !== projectKey) return null;
+  return toIssueRecord(rawIssue, projectKey);
 }
 
 /** Resolve a finding using the caller's current access and verify that it still matches this issue. */

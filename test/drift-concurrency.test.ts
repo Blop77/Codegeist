@@ -109,8 +109,14 @@ test('a scan that read the issue before the trigger cannot reopen what the trigg
   assert.equal(stored().drifts['dc_a:DD-1'].status, 'resolved');
 });
 
-test('an older trigger observation cannot resolve a drift a newer scan confirmed', () => {
-  const radar = { findings: { dc_a: { firstSeenAt: t(0) } }, drifts: { 'dc_a:DD-1': open('dc_a', 'DD-1', 'on Mondays', t(8)) } };
+test('an older observation cannot resolve a drift a newer scan confirmed', () => {
+  // The drift opened at t0. A newer scan (read at t8) confirms the old wording through the real
+  // code path, which records t8; no observation time is seeded by hand.
+  const opened = { findings: { dc_a: { firstSeenAt: t(0) } }, drifts: { 'dc_a:DD-1': open('dc_a', 'DD-1', 'on Mondays', t(0)) } };
+  const staleIssue = { key: 'DD-1', title: 'Status updates', description: 'Status updates go out on Mondays.' };
+  const radar = applyScan(opened, { candidates: [finding('dc_a', [outdated('DD-1', 'on Mondays')])], issueRecords: [staleIssue], now: t(8), observedAt: t(8) }).radar;
+  assert.equal(radar.drifts['dc_a:DD-1'].observedAt, t(8));
+  // A slow scan that read a clean issue at t7 saves afterwards: it must not resolve the drift.
   const issue = { key: 'DD-1', title: 'Status updates', description: 'Status updates go out on Fridays.' };
   const stale = applyScan(radar, { candidates: [finding('dc_a', [])], issueRecords: [issue], now: t(9), observedAt: t(7) });
   assert.equal(stale.radar.drifts['dc_a:DD-1'].status, 'open');
@@ -182,14 +188,15 @@ test('an old single-key record is copied across on first read even when nothing 
   kvsMemory.clear();
   kvsMemory.set('radar:DD', { findings: { dc_a: { firstSeenAt: t(0) } }, drifts: { 'dc_a:DD-1': open('dc_a', 'DD-1', 'on Mondays') } });
   const issue = { key: 'DD-1', title: 'Status updates', description: 'Status updates go out on Mondays.' };
-  await trackScan('DD', { candidates: [finding('dc_a', [outdated('DD-1', 'on Mondays')])], issueRecords: [issue] });
+  await trackScan('DD', { candidates: [finding('dc_a', [outdated('DD-1', 'on Mondays')])], issueRecords: [issue], observedAt: t(0) });
   assert.equal(kvsMemory.get(STATE('DD'))?.version, 1, 'the new record exists after one read');
+  assert.equal(kvsMemory.has('radar:DD'), false, 'the old record is deleted once copied');
   assert.equal(stored().drifts['dc_a:DD-1'].status, 'open');
   const writes: string[] = [];
   g.__kvsHook = async (op: string, key: string) => { if (op !== 'get') writes.push(key); };
-  await trackScan('DD', { candidates: [finding('dc_a', [outdated('DD-1', 'on Mondays')])], issueRecords: [issue] });
+  await trackScan('DD', { candidates: [finding('dc_a', [outdated('DD-1', 'on Mondays')])], issueRecords: [issue], observedAt: t(0) });
   g.__kvsHook = undefined;
-  assert.deepEqual(writes, [], 'later scans with nothing new write nothing');
+  assert.deepEqual(writes, [], 'repeating the same observation writes nothing');
 });
 
 test('a viewer sees drift history only for findings and issues their own scan read', () => {
@@ -210,4 +217,64 @@ test('a viewer sees drift history only for findings and issues their own scan re
   assert.ok(!shown.includes('DD-9') && !shown.includes('secret phrase'), 'an unreadable issue’s key and phrase are not shown');
   assert.ok(!shown.includes('restricted page phrase'), 'a finding the viewer cannot read is not shown');
   assert.deepEqual(radarSummary(described), { findings: 1, newSinceLastVisit: 0, drifting: 1, resolved: 0 }, 'counts cover only what the viewer can read');
+});
+
+test('a project scan re-reads an issue before reopening it, so a lagging search result cannot', async () => {
+  const resolved = { ...open('dc_a', 'DD-1', 'on Mondays'), status: 'resolved', resolvedAt: t(5), resolvedBy: 'issue-update', observedAt: t(5) };
+  const scan = (confirmIssue: (key: string) => Promise<unknown>) => trackScan('DD', {
+    // The search result still has the old wording.
+    candidates: [finding('dc_a', [outdated('DD-1', 'on Mondays')])],
+    issueRecords: [{ key: 'DD-1', title: 'Status updates', description: 'Status updates go out on Mondays.' }],
+    confirmIssue: confirmIssue as any
+  });
+  seed({ 'dc_a:DD-1': resolved });
+  const reads: string[] = [];
+  await scan(async (key) => { reads.push(key); return { key, title: 'Status updates', description: 'Status updates go out on Fridays.' }; });
+  assert.deepEqual(reads, ['DD-1'], 'only the issue about to be reopened is read');
+  assert.equal(stored().drifts['dc_a:DD-1'].status, 'resolved', 'the direct read shows the edit, so it stays resolved');
+
+  seed({ 'dc_a:DD-1': resolved });
+  await scan(async (key) => ({ key, title: 'Status updates', description: 'Status updates go out on Mondays.' }));
+  assert.equal(stored().drifts['dc_a:DD-1'].status, 'open', 'the old wording really came back, so it reopens');
+
+  seed({ 'dc_a:DD-1': resolved });
+  await scan(async () => null);
+  assert.equal(stored().drifts['dc_a:DD-1'].status, 'open', 'if the issue cannot be re-read, the scan’s own evidence stands');
+});
+
+test('two invocations migrating the old record at once both succeed and keep the history', async () => {
+  kvsMemory.clear();
+  kvsMemory.set('radar:DD', { findings: { dc_a: { firstSeenAt: t(0) } }, drifts: { 'dc_a:DD-1': open('dc_a', 'DD-1', 'on Mondays') } });
+  issueText['DD-1'] = { summary: 'Status updates', description: adf('Status updates go out on Fridays.') };
+  const issue = { key: 'DD-1', title: 'Status updates', description: 'Status updates go out on Mondays.' };
+  const done = interleaveReads(STATE('DD'));
+  const [, trigger] = await Promise.all([
+    trackScan('DD', { candidates: [finding('dc_a', [outdated('DD-1', 'on Mondays')]), finding('dc_new', [])], issueRecords: [issue], observedAt: t(1) }),
+    onIssueUpdated(edit('DD-1'))
+  ]);
+  done();
+  assert.equal((trigger as any).resolved, 1);
+  const radar = stored();
+  assert.equal(radar.drifts['dc_a:DD-1'].status, 'resolved', 'the trigger’s change survived the scan’s concurrent first write');
+  assert.equal(radar.findings.dc_a.firstSeenAt, t(0), 'carried-over history kept');
+  assert.ok(radar.findings.dc_new, 'the scan’s change survived too');
+  assert.equal(kvsMemory.has('radar:DD'), false);
+});
+
+test('when every write fails, a scan still returns its findings and the trigger reports the failure', async () => {
+  seed({ 'dc_a:DD-1': open('dc_a', 'DD-1', 'on Mondays') });
+  const kvsModule: any = await import('./mocks/kvs.mjs');
+  const transact = kvsModule.kvs.transact;
+  kvsModule.kvs.transact = () => ({ set() { return this; }, delete() { return this; }, execute: async () => { throw Object.assign(new Error('nope'), { code: 'TOO_MANY_REQUESTS' }); } });
+  try {
+    const tracked = await trackScan('DD', { candidates: [finding('dc_a', []), finding('dc_new', [])], issueRecords: [], observedAt: t(1) });
+    assert.equal(tracked.summary, null);
+    assert.match(tracked.radarWarning, /Drift history is unavailable/);
+    assert.equal(tracked.candidates.length, 2);
+    issueText['DD-1'] = { summary: 'Status updates', description: adf('Status updates go out on Fridays.') };
+    await assert.rejects(onIssueUpdated(edit('DD-1')));
+    assert.equal(stored().drifts['dc_a:DD-1'].status, 'open', 'nothing half-written');
+  } finally {
+    kvsModule.kvs.transact = transact;
+  }
 });

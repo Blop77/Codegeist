@@ -46,11 +46,15 @@ export const kvs = {
   transact() {
     const ops = [];
     const builder = {
+      // Conditions only exist on custom entities, so a conditional write must name its entity,
+      // as the real SDK requires; without it the write would land in the plain key-value store.
       set(key, value, entity) {
+        if (entity?.conditions && !entity?.entityName) throw new Error('entityName is required with conditions');
         ops.push({ type: 'set', key, value, conditions: entity?.conditions });
         return builder;
       },
       delete(key, entity) {
+        if (entity?.conditions && !entity?.entityName) throw new Error('entityName is required with conditions');
         ops.push({ type: 'delete', key, conditions: entity?.conditions });
         return builder;
       },

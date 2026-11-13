@@ -68,3 +68,24 @@ test('Teamwork Graph decision → person edits the issue → trigger resolves �
   assert.equal(reopened.firstSeenAt, opened.firstSeenAt);
   assert.deepEqual([after.radar.drifting, after.radar.resolved], [1, 0]);
 });
+
+test('a moved issue or renamed project key is refused instead of filing history under the old key', async () => {
+  const original = g.__jira;
+  const { kvsMemory } = await import('./mocks/kvs.mjs');
+  try {
+    // Jira answers the old key OLD-3 with the moved issue MK-10.
+    g.__jira = (path: string, json: any) => (path.startsWith('/rest/api/3/issue/OLD-3') ? json(issue()) : original(path, json));
+    const panel = await handler.getIssueDecisionContext({ payload: { issueKey: 'OLD-3' }, context: ctx });
+    assert.equal(panel.ok, false);
+    assert.match(panel.error, /OLD-3 has moved to MK-10/);
+
+    // An old project key that still finds the renamed project's issues.
+    g.__jira = (path: string, json: any) => (/\/project\/OLD$/.test(path) ? json({ key: 'MK' }) : original(path, json));
+    const scan = await handler.getProjectRadar({ payload: { projectKey: 'OLD' }, context: ctx });
+    assert.equal(scan.ok, false);
+    assert.match(scan.error, /Project OLD is now MK/);
+    assert.equal(kvsMemory.has('radar-state:OLD'), false, 'nothing recorded under the old key');
+  } finally {
+    g.__jira = original;
+  }
+});
