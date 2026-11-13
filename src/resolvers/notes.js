@@ -265,6 +265,15 @@ async function loadByPrefix(prefix) {
   return { entries, complete: false };
 }
 
+/**
+ * Only the note records for issues this finding lists as affected. Those come from the viewer's
+ * own scan, so issue keys and comment ids of issues they cannot see are never returned.
+ */
+function visibleNotes(candidate, notes) {
+  const visible = new Set((candidate.affectedIssues ?? []).map((affected) => affected.issueKey));
+  return Object.fromEntries(Object.entries(notes ?? {}).filter(([issueKey]) => visible.has(issueKey)));
+}
+
 /** Adds each finding's saved review and the notes already posted to Jira for it. */
 export async function attachReviewState(projectKey, candidates) {
   if (candidates.length === 0) return { candidates, reviewWarning: null };
@@ -283,7 +292,7 @@ export async function attachReviewState(projectKey, candidates) {
       candidates: candidates.map((candidate) => ({
         ...candidate,
         review: reviews.entries.get(candidate.id) ?? null,
-        notes: notesByCandidate.get(candidate.id) ?? {}
+        notes: visibleNotes(candidate, notesByCandidate.get(candidate.id))
       })),
       reviewWarning: complete ? null : 'Some older reviews could not be loaded for this project.'
     };

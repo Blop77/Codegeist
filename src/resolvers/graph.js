@@ -77,7 +77,7 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  *   concluded from it.
  * Throws a LookupError only when every attempt failed.
  */
-async function readConnection(query, variables, field, { retryEmpty }) {
+async function readConnection(query, variables, field, { retryEmpty, late = () => false }) {
   let lastAnswer = null;
   let lastError = null;
   let uncertain = false;
@@ -96,6 +96,8 @@ async function readConnection(query, variables, field, { retryEmpty }) {
       uncertain = true;
       if (lastAnswer) lastAnswer = { nodes: [], answer: 'missing' };
     }
+    // Out of time: settle for what this attempt gave rather than wait to retry.
+    if (attempt < GRAPH_ATTEMPTS && late()) break;
     if (attempt < GRAPH_ATTEMPTS) await pause(RETRY_DELAY_MS * attempt);
   }
   if (lastAnswer) return lastAnswer;
@@ -135,10 +137,21 @@ const listOf = (names) => (names.length <= 1 ? names.join('') : `${names.slice(0
  * status.spaces:      found | partial | none | error | skipped
  * status.spacePages:  ok | error | skipped
  * status.linkedPages: ok | partial | error | skipped
+ *
+ * After `deadline` (a Date.now() value), no new lookup starts and failed ones are not retried, so
+ * the scan finishes within Forge's time limit. The summary then says the lookups stopped early.
  */
-export async function discoverViaGraph({ projectKey, projectId, cloudId, knownPageIds = [] }) {
+export async function discoverViaGraph({ projectKey, projectId, cloudId, knownPageIds = [], deadline = null }) {
   const status = { teams: 'skipped', spaces: 'skipped', spacePages: 'skipped', linkedPages: 'skipped' };
   const notes = [];
+  const late = () => deadline !== null && Date.now() > deadline;
+  let stoppedEarly = false;
+  const outOfTime = () => {
+    if (!late()) return false;
+    if (!stoppedEarly) notes.push('Teamwork Graph lookups stopped early to keep the scan within Jira\'s time limit, so some team pages may be missing. Scan again to retry.');
+    stoppedEarly = true;
+    return true;
+  };
   const summary = { used: false, teams: [], spaces: [], pagesAdded: 0, linkedPagesAdded: 0, note: null, notes, status };
   const finish = () => {
     summary.note = notes.length > 0 ? notes.join(' ') : null;
@@ -155,7 +168,7 @@ export async function discoverViaGraph({ projectKey, projectId, cloudId, knownPa
   let teams = [];
   try {
     const projectAri = `ari:cloud:jira:${cloudId}:project/${projectId}`;
-    const answer = await readConnection(TEAMS_BY_SPACE, { spaceAri: projectAri }, 'atlassianTeamsBySpace', { retryEmpty: true });
+    const answer = await readConnection(TEAMS_BY_SPACE, { spaceAri: projectAri }, 'atlassianTeamsBySpace', { retryEmpty: true, late });
     teams = answer.nodes.filter((n) => n.__typename === 'AtlassianTeam').slice(0, MAX_TEAMS);
     if (teams.length > 0) {
       status.teams = 'found';
@@ -181,8 +194,9 @@ export async function discoverViaGraph({ projectKey, projectId, cloudId, knownPa
     let failedTeams = 0;
     let lastError = null;
     for (const team of teams) {
+      if (outOfTime()) break;
       try {
-        const answer = await readConnection(SPACES_BY_TEAM, { teamAri: team.id }, 'spacesByAtlassianTeam', { retryEmpty: true });
+        const answer = await readConnection(SPACES_BY_TEAM, { teamAri: team.id }, 'spacesByAtlassianTeam', { retryEmpty: true, late });
         if (answer.answer === 'missing' || answer.partial) failedTeams++;
         for (const space of answer.nodes.filter((n) => n.__typename === 'ConfluenceSpace' && n.key)) {
           if (!spaceTeam.has(space.key) && spaceTeam.size < MAX_SPACES) spaceTeam.set(space.key, { space, team });
@@ -210,7 +224,7 @@ export async function discoverViaGraph({ projectKey, projectId, cloudId, knownPa
   }
 
   // 3. Decision pages in those spaces, even when they never mention the project key.
-  if (spaceTeam.size > 0) {
+  if (spaceTeam.size > 0 && !outOfTime()) {
     const spaceList = [...spaceTeam.keys()].map(quote).join(',');
     // Pages titled as decision records. Matching body text instead pulls in templates whose
     // instructions mention decisions (DACI, premortems, meeting-note templates).
@@ -241,15 +255,16 @@ export async function discoverViaGraph({ projectKey, projectId, cloudId, knownPa
   // 4. Pages linked from the decision pages found so far. Runs whatever happened above, since
   //    key-search pages are origins too. Each origin is read on its own.
   const origins = [...knownPageIds.map(String), ...pages.map((p) => p.id.replace(/^page-/, ''))].slice(0, MAX_LINK_ORIGINS);
-  if (origins.length > 0) {
+  if (origins.length > 0 && !outOfTime()) {
     const linkedIds = new Map();
     let failedOrigins = 0;
     let lastError = null;
     for (const originId of origins) {
+      if (outOfTime()) break;
       try {
         const pageAri = `ari:cloud:confluence:${cloudId}:page/${originId}`;
         // Most pages link to nothing, so an empty answer is not retried.
-        const answer = await readConnection(LINKED_PAGES, { pageAri }, 'confluencePageLinkedConfluencePages', { retryEmpty: false });
+        const answer = await readConnection(LINKED_PAGES, { pageAri }, 'confluencePageLinkedConfluencePages', { retryEmpty: false, late });
         if (answer.answer === 'missing' || answer.partial) failedOrigins++;
         for (const node of answer.nodes) {
           const id = pageIdOf(node);
@@ -265,7 +280,7 @@ export async function discoverViaGraph({ projectKey, projectId, cloudId, knownPa
     if (failedOrigins > 0) {
       notes.push(`Could not read Teamwork Graph links from ${failedOrigins} of ${origins.length} decision ${origins.length === 1 ? 'page' : 'pages'}${httpNote(lastError)}.`);
     }
-    if (linkedIds.size > 0) {
+    if (linkedIds.size > 0 && !outOfTime()) {
       const cql = `type = page AND id in (${[...linkedIds.keys()].join(',')})`;
       try {
         for (const page of await confluencePages(cql, MAX_LINKED_PAGES)) {

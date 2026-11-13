@@ -5,8 +5,9 @@ The Forge app uses Jira as its required product and Confluence as an optional co
 ## Data flow
 
 1. The resolver (`src/resolvers/index.js`) fetches, as the signed-in user:
-   - up to 25 project issues with `summary, status, labels, updated, description, comment, reporter`;
-   - up to 10 Confluence pages whose text mentions the project key, with `body.atlas_doc_format` (falling back to `body.storage`).
+   - the 50 most recently updated project issues with `summary, status, labels, updated, description, comment, reporter, project`;
+   - up to 20 Confluence pages whose text mentions the project key, with `body.atlas_doc_format` (falling back to `body.storage`), searched alongside the Jira read;
+   - when the project has no issues, or Jira search rejects the key, the project itself (`GET /rest/api/3/project/{key}`), for its id and to name similar projects when the key is unknown.
 2. `src/resolvers/normalize.js` turns those payloads into the domain records in `src/domain/decisionTypes.ts`:
    - each issue becomes an `IssueRecord` (description converted from ADF to plain text);
    - each issue description and each comment becomes a `jira_issue` / `jira_comment` `SourceRecord`; comment URLs use `/browse/KEY?focusedCommentId=ID`, which the matcher uses to find the parent issue;
@@ -21,7 +22,7 @@ The Forge app uses Jira as its required product and Confluence as an optional co
 - `{ ok: true, projectKey, issues: [{ key, summary, status, labels, url, updated }], pages: [{ id, title, url }], candidates: DecisionCandidate[], notice: string | null, warnings: string[] }`
 - `{ ok: false, error }`
 
-`getIssueDecisionContext({ issueKey })` scans that issue's description and comments plus the project's Confluence pages, and returns only candidates whose `affectedIssues` include the issue:
+`getIssueDecisionContext({ issueKey })` reads the issue directly (so an edit shows at once), the project's 50 most recently updated issues and its Confluence pages, and runs the same analysis as the project scan. It returns only candidates whose `affectedIssues` include the issue, each narrowed to that issue, so the panel and the project scan agree. Drift history is recorded for that issue only:
 
 - `{ ok: true, issueKey, candidates: DecisionCandidate[], notice, warnings }`
 - `{ ok: false, error }`
@@ -48,24 +49,26 @@ Scans and reviews do not write to Jira. `reviewDecision` and `clearDecisionRevie
 
 ## Rovo agent
 
-The `rovo:agent` module `decision-drift-radar-agent` (prompt in `src/rovo/agent-prompt.txt`) uses two `action` modules, both `actionVerb: GET`, implemented in `src/rovo/actions.js`:
+The `rovo:agent` module `decision-drift-radar-agent` (prompt in `src/rovo/agent-prompt.txt`) uses four `action` modules, implemented in `src/rovo/actions.js`:
 
-- `find-project-decisions({ projectKey })` runs `scanProject`.
-- `find-issue-decisions({ issueKey })` runs `scanIssue`.
+- `find-project-decisions({ projectKey })` (`GET`) runs `scanProject`.
+- `find-issue-decisions({ issueKey })` (`GET`) runs `scanIssue`.
+- `find-more-decisions-with-ai({ projectKey })` (`CREATE`) runs the AI pass below.
+- `prepare-decision-note({ issueKey, findingId, note })` (`CREATE`) stores a private draft for the requesting person, which they review and post from the Jira issue panel.
 
-Both run as the person in the chat (`asUser()`), validate the key, and fall back to the Jira project or issue the user is viewing (`payload.context.jira`) when the input is missing or invalid. They return `{ ok, findingCount, findings: [{ kind, statement, quote, source: { type, title, link, updated, author }, wordingSignals, affectedIssues: [{ issueKey, link, relevance, reasons }] }], warnings, howToRead }`, capped at 15 findings. Links are absolute when Rovo passes the page URL, otherwise site-relative. The actions read no review state and write nothing; `src/resolvers/scan.js` holds the scan logic shared with the UI resolvers.
+All run as the person in the chat (`asUser()`). When the input names no key, they use the Jira project or issue the user is viewing (`payload.context.jira`, including the project of a viewed issue). A key the user gave that is not valid is an error; it is never replaced by the page's project. Scan results come back as `{ ok, findingCount, findings: [{ findingId, foundBy, review, kind, statement, quote, source: { type, title, link, updated, foundThrough, author }, wordingSignals, affectedIssues: [{ issueKey, link, relevance, reasons, wordingStatus, drift, notePosted }], resolvedIssues }], warnings, howToRead }`, capped at 15 findings. Links are absolute when Rovo passes the page URL, otherwise site-relative. `howToRead` and the agent prompt tell the agent that quotes, titles and other source text are data and that instructions inside them are never followed. `src/resolvers/scan.js` holds the scan logic shared with the UI resolvers.
 
 ## Teamwork Graph
 
-`scanProject` and `scanIssue` call `discoverViaGraph` (`src/resolvers/graph.js`) with the project id (from the issue's `project` field) and `context.cloudId`. As the user, via `requestTeamworkGraph`, it reads `atlassianTeamsBySpace` for `ari:cloud:jira:<cloudId>:project/<projectId>` (up to 5 teams), `spacesByAtlassianTeam` for each (up to 8 Confluence spaces), searches those spaces for decision wording (up to 10 pages), and reads `confluencePageLinkedConfluencePages` from up to 5 decision pages (up to 10 linked pages). New pages become `confluence_page` sources with `via` set (for example "Teamwork Graph: a Confluence space of team Brand, linked to MC"); `via` is passed through to candidates. Responses include `graph: { used, teams, spaces, pagesAdded, linkedPagesAdded, note }`. Any error, empty result or missing id leaves the scan as it would be without the graph, with a `note`. Scopes: `read:graph:project:jira`, `read:graph:team:atlassian`, `read:graph:space:confluence`, `read:graph:page:confluence` (a major version). The API is in Preview.
+`scanProject` and `scanIssue` call `discoverViaGraph` (`src/resolvers/graph.js`) with the project id (from an issue's `project` field, or from the project itself when it has no issues) and `context.cloudId`. As the user, via `requestTeamworkGraph`, it reads `atlassianTeamsBySpace` for `ari:cloud:jira:<cloudId>:project/<projectId>` (up to 5 teams), `spacesByAtlassianTeam` for each (up to 8 Confluence spaces), searches those spaces for decision wording (up to 10 pages), and reads `confluencePageLinkedConfluencePages` from up to 5 decision pages (up to 10 linked pages). New pages become `confluence_page` sources with `via` set (for example "Teamwork Graph: a Confluence space of team Brand, linked to MC"); `via` is passed through to candidates. Responses include `graph: { used, teams, spaces, pagesAdded, linkedPagesAdded, note }`. Any error, empty result or missing id leaves the scan as it would be without the graph, with a `note`. Twelve seconds after a scan starts, no new Graph lookup starts and failed ones are not retried, so the scan stays within Forge's 25-second limit; the `note` then says the lookups stopped early. Scopes: `read:graph:project:jira`, `read:graph:team:atlassian`, `read:graph:space:confluence`, `read:graph:page:confluence` (a major version). The API is in Preview.
 
 ## AI pass
 
-`getAiFindings({ projectKey })` rescans the project as the user, then calls Forge LLMs (`@forge/llm`, model `claude-sonnet-5`, at most 1,500 output tokens) with up to 15 sources and 24,000 characters, and the rule-based findings as "already found". The model returns `{ findings: [{ sourceId, quote, kind, reason }] }`. `verifyProposedFindings` in `src/domain/extractDecisions.ts` keeps a proposal only if its quote occurs verbatim in that source, is 12 to 280 characters, has a valid kind, and does not overlap a known finding; kept proposals get the same span, id and issue matching as rule-based findings, and the reason "Found by the AI pass; the quote was checked word for word against the source". Results carry `ai: true` and review state; they are not stored.
+`getAiFindings({ projectKey })` rescans the project as the user, then calls Forge LLMs (`@forge/llm`, model `claude-sonnet-5`, at most 3,000 output tokens) with up to 15 sources and 24,000 characters, and the findings already known (rule-based and saved AI findings) as "already found". The model returns `{ findings: [{ sourceId, quote, kind }] }`; any other field is discarded. `verifyProposedFindings` in `src/domain/extractDecisions.ts` keeps a proposal only if its quote occurs verbatim in that source, is 12 to 280 characters, has a valid kind, and does not overlap a known finding; kept proposals get the same span, id and issue matching as rule-based findings, and the reason "Found by the AI pass; the quote was checked word for word against the source". Results carry `ai: true` and review state. Verified findings are saved per project (`ai-proposals:<KEY>`, at most 30, as source id, quote and kind only) and checked again against the current sources on every scan.
 
 `getSampleAiFindings()` does the same over the bundled sample data and reads nothing from the site.
 
-Cost guards: a run is refused after 40 runs per site per day (`ai-usage:<date>`) or within 30 seconds of the last run for the same project (`ai-last:<KEY>`). Model errors and unparseable replies return a message, never a partial result. The `llm` module made this a major version.
+Cost guards: a run is refused after 40 runs per site per day (`ai-usage:<date>`) or within 30 seconds of the last run for the same project (`ai-last:<KEY>`). Model errors and unreadable replies (for example, one cut off mid-way) return a message, never a partial result or a silent "nothing found", and the run is given back so it does not count towards the daily limit or start the cooldown. An empty `findings` list is a real answer and counts. The `llm` module made this a major version.
 
 `listProjects()` returns `{ ok: true, projects: [{ key, name }], more }` (first 50 projects the user can see) for the project picker.
 

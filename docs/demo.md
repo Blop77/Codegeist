@@ -9,8 +9,8 @@ How the hackathon demo is set up, how to run it, and what it does and does not s
 | Demo site | `one-atlas-pxox.atlassian.net`, a Forge demo site active until 2027-02-09 |
 | Installation | One development installation covering **Jira (required)** and **Confluence**, major version 6, up to date (`forge install list`) |
 | Other site | `decitrace.atlassian.net` is still on major version 2. Forge classifies it as a production site, so it is deliberately not upgraded with development builds. |
-| Development | Version **6.8.0**, verified on MC-10 for resolution on edit and reopening after restoration. The prior **6.7.0** test verified Rovo draft preparation and posting from the Jira issue panel. |
-| Production | Version **3.3.0**, checked on `jiggzer.atlassian.net` with the existing installation link. The live scan found a decision page through Teamwork Graph without a project key in the page, and a reviewed note posted once to the affected issue. |
+| Development | Version **6.10.0**, verified on MC-10 for resolution on edit and reopening after restoration, with the drift history carried over from the earlier storage record. The earlier **6.7.0** test verified Rovo draft preparation and posting from the Jira issue panel. |
+| Production | Version **3.7.0**, checked on `jiggzer.atlassian.net` on 13 November: a project scan found the Teamwork Graph team link, a decision page in that team's space that never mentions the project key, and two drifts. The earlier **3.3.0** check posted a reviewed note once to the affected issue. |
 
 Version 4 added the `write:jira-work` scope for the note action, so the installation was upgraded to grant it.
 

@@ -12,7 +12,8 @@ export const AI_MODEL = 'claude-sonnet-5';
 const MAX_SOURCES = 15;
 const MAX_CHARS_PER_SOURCE = 3000;
 const MAX_TOTAL_CHARS = 24000;
-const MAX_OUTPUT_TOKENS = 1500;
+// Room for MAX_PROPOSALS one-sentence findings; a reply cut off mid-JSON is reported, not read as "none".
+const MAX_OUTPUT_TOKENS = 3000;
 const MAX_PROPOSALS = 20;
 export const DAILY_RUNS_PER_SITE = 40;
 export const COOLDOWN_SECONDS = 30;
@@ -51,19 +52,17 @@ function userPrompt(sources, known) {
   return `Already found (do not repeat):\n${knownList}\n\nSources:\n\n${body}`;
 }
 
-/** The model's JSON reply, tolerating a code fence or stray text around it. */
+/**
+ * The model's JSON reply, tolerating a code fence or stray text around it. Null when the reply
+ * has no readable findings list (for example, cut off mid-way), so a broken reply is never
+ * mistaken for "nothing new".
+ */
 export function parseProposals(content) {
-  const text = Array.isArray(content) ? content.map((part) => part?.text ?? '').join('') : String(content ?? '');
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start === -1 || end <= start) return [];
-  try {
-    const parsed = JSON.parse(text.slice(start, end + 1));
-    return Array.isArray(parsed?.findings) ? parsed.findings.slice(0, MAX_PROPOSALS) : [];
-  } catch {
-    return [];
-  }
+  const parsed = parseJsonObject(content);
+  return Array.isArray(parsed?.findings) ? parsed.findings.slice(0, MAX_PROPOSALS) : null;
 }
+
+const errorLabel = (error) => [error?.name, error?.code ?? error?.status].filter(Boolean).join(' ') || 'unknown error';
 
 /** Per-site daily cap and a short cooldown per scope. Returns an error message, or null to proceed. */
 async function claimRun(scopeKey) {
@@ -80,6 +79,17 @@ async function claimRun(scopeKey) {
   }
   await Promise.all([storage.set(usageKey, (used ?? 0) + 1), storage.set(lastKey, now)]);
   return null;
+}
+
+/** Gives back a run that never reached a usable model answer, so it does not use up the day's limit. */
+async function releaseRun(scopeKey) {
+  try {
+    const usageKey = `ai-usage:${new Date().toISOString().slice(0, 10)}`;
+    const used = (await storage.get(usageKey)) ?? 0;
+    await Promise.all([storage.set(usageKey, Math.max(0, used - 1)), storage.delete(`ai-last:${scopeKey}`)]);
+  } catch (error) {
+    console.warn('Decision Drift Radar could not release an AI run', errorLabel(error));
+  }
 }
 
 const SAVED_LIMIT = 30;
@@ -130,7 +140,10 @@ export async function findWithAi({ scopeKey, sources, issues, known, saveFor = n
   if (limited) return { ok: false, error: limited };
 
   const picked = pickSources(sources);
-  if (picked.length === 0) return { ok: true, candidates: [], rejected: 0, sourcesSent: 0, model: AI_MODEL };
+  if (picked.length === 0) {
+    await releaseRun(scopeKey);
+    return { ok: true, candidates: [], rejected: 0, sourcesSent: 0, model: AI_MODEL };
+  }
 
   let response;
   try {
@@ -142,12 +155,19 @@ export async function findWithAi({ scopeKey, sources, issues, known, saveFor = n
         { role: 'user', content: userPrompt(picked, known) }
       ]
     });
-  } catch {
-    console.error('Decision Drift Radar AI pass failed');
+  } catch (error) {
+    console.error('Decision Drift Radar AI pass failed', errorLabel(error));
+    await releaseRun(scopeKey);
     return { ok: false, error: 'The AI pass is unavailable right now. The rule-based findings above are unaffected.' };
   }
 
-  const proposals = parseProposals(response?.choices?.[0]?.message?.content).filter((proposal) => proposal && typeof proposal === 'object').map(evidenceOnly);
+  const parsed = parseProposals(response?.choices?.[0]?.message?.content);
+  if (parsed === null) {
+    console.warn('Decision Drift Radar AI reply could not be read', response?.choices?.[0]?.finish_reason ?? 'no finish reason');
+    await releaseRun(scopeKey);
+    return { ok: false, error: 'The AI reply could not be read, so nothing was added. It did not count towards today\'s limit; try again.' };
+  }
+  const proposals = parsed.filter((proposal) => proposal && typeof proposal === 'object').map(evidenceOnly);
   // Verify against the full source text, not the truncated copy sent to the model.
   const { candidates, rejected } = verifyProposedFindings({ sources, issues }, proposals, known);
   if (saveFor) {
@@ -214,14 +234,18 @@ export async function draftNoteWithAi({ candidate, issue }) {
         { role: 'user', content: input }
       ]
     });
-  } catch {
-    console.error('Decision Drift Radar AI note draft failed');
+  } catch (error) {
+    console.error('Decision Drift Radar AI note draft failed', errorLabel(error));
+    await releaseRun(`draft:${issue.key}:${candidate.id}`);
     return { ok: false, error: 'The AI could not draft a note right now. You can still write it yourself.' };
   }
 
   const draft = parseJsonObject(response?.choices?.[0]?.message?.content);
   const note = typeof draft?.note === 'string' ? draft.note.replace(/[ \t]+/g, ' ').trim().slice(0, 1200) : '';
-  if (!note) return { ok: false, error: 'The AI returned no usable draft. You can still write the note yourself.' };
+  if (!note) {
+    await releaseRun(`draft:${issue.key}:${candidate.id}`);
+    return { ok: false, error: 'The AI returned no usable draft. You can still write the note yourself.' };
+  }
   const outdated = typeof draft.outdated === 'string' ? draft.outdated.trim() : '';
   const replacement = typeof draft.replacement === 'string' ? draft.replacement.trim() : '';
   const verified = outdated.length >= 3 && outdated.length <= 200 && replacement && replacement.length <= 200
