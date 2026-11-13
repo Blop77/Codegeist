@@ -11,6 +11,8 @@ const SITE = 'https://example.atlassian.net';
 const { applyScan, describeFindings, onIssueUpdated } = await import('../src/resolvers/drift.js');
 const { handler } = await import('../src/resolvers/index.js');
 const { kvsMemory } = await import('./mocks/kvs.mjs');
+/** The stored radar for a project (versioned custom-entity record). */
+const storedRadar = (projectKey: string) => kvsMemory.get(`radar-state:${projectKey}`)?.radar;
 
 const t = (text: string) => ({ type: 'text', text });
 const doc = (lines: string[]) => ({ type: 'doc', content: lines.map((line) => ({ type: 'paragraph', content: [t(line)] })) });
@@ -54,29 +56,41 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const finding = (id: string, affected: unknown[]) => ({ id, affectedIssues: affected });
 const outdated = (issueKey: string, phrase: string) => ({ issueKey, relevance: 0.9, reasons: [], wordingStatus: 'outdated', outdatedWording: phrase });
 const plain = (issueKey: string) => ({ issueKey, relevance: 0.5, reasons: [] });
+const staleIssue = { key: 'DD-1', title: 'Plan the launch', description: 'Scheduling: separate channel plans.' };
+const updatedIssue = { ...staleIssue, description: 'Scheduling: one shared launch plan.' };
 
 test('applyScan opens, keeps, resolves and reopens drifts only on evidence', () => {
   const empty = { findings: {}, drifts: {} };
-  const first = applyScan(empty, { candidates: [finding('dc_a', [outdated('DD-1', 'separate channel plans')])], scannedIssueKeys: ['DD-1'], now: 't1' });
+  const first = applyScan(empty, { candidates: [finding('dc_a', [outdated('DD-1', 'separate channel plans')])], issueRecords: [staleIssue], now: 't1' });
   assert.equal(first.changed, true);
   assert.equal(first.radar.findings.dc_a.firstSeenAt, 't1');
   assert.equal(first.radar.drifts['dc_a:DD-1'].status, 'open');
 
-  const same = applyScan(first.radar, { candidates: [finding('dc_a', [outdated('DD-1', 'separate channel plans')])], scannedIssueKeys: ['DD-1'], now: 't2' });
-  assert.equal(same.changed, false, 'a repeat scan writes nothing');
+  const same = applyScan(first.radar, { candidates: [finding('dc_a', [outdated('DD-1', 'separate channel plans')])], issueRecords: [staleIssue], now: 't2', observedAt: 't1' });
+  assert.equal(same.changed, false, 'a repeat of the same observation writes nothing');
+  const confirmed = applyScan(first.radar, { candidates: [finding('dc_a', [outdated('DD-1', 'separate channel plans')])], issueRecords: [staleIssue], now: 't2' });
+  assert.equal(confirmed.changed, true, 'a newer scan that confirms the drift records its observation time');
+  assert.equal(confirmed.radar.drifts['dc_a:DD-1'].observedAt, 't2');
+  assert.equal(confirmed.radar.drifts['dc_a:DD-1'].status, 'open');
 
-  const findingMissing = applyScan(first.radar, { candidates: [], scannedIssueKeys: ['DD-1'], now: 't2' });
+  const findingMissing = applyScan(first.radar, { candidates: [], issueRecords: [staleIssue], now: 't2' });
   assert.equal(findingMissing.radar.drifts['dc_a:DD-1'].status, 'open', 'a finding the scan did not return is not resolved');
-  const issueMissing = applyScan(first.radar, { candidates: [finding('dc_a', [])], scannedIssueKeys: ['DD-2'], now: 't2' });
+  const issueMissing = applyScan(first.radar, { candidates: [finding('dc_a', [])], issueRecords: [{ ...updatedIssue, key: 'DD-2' }], now: 't2' });
   assert.equal(issueMissing.radar.drifts['dc_a:DD-1'].status, 'open', 'an issue the scan did not read is not resolved');
 
-  const fixed = applyScan(first.radar, { candidates: [finding('dc_a', [plain('DD-1')])], scannedIssueKeys: ['DD-1'], now: 't3' });
+  const lostMatch = applyScan(first.radar, { candidates: [finding('dc_a', [])], issueRecords: [staleIssue], now: 't2' });
+  assert.equal(lostMatch.radar.drifts['dc_a:DD-1'].status, 'open', 'a missing match cannot resolve a phrase still in the issue');
+  const incompleteIssue = { key: 'DD-1', title: 'Plan the launch' };
+  const incomplete = applyScan(first.radar, { candidates: [finding('dc_a', [])], issueRecords: [incompleteIssue], now: 't2' });
+  assert.equal(incomplete.radar.drifts['dc_a:DD-1'].status, 'open', 'an omitted description cannot resolve a drift');
+
+  const fixed = applyScan(first.radar, { candidates: [finding('dc_a', [plain('DD-1')])], issueRecords: [updatedIssue], now: 't3' });
   assert.deepEqual(
     { status: fixed.radar.drifts['dc_a:DD-1'].status, at: fixed.radar.drifts['dc_a:DD-1'].resolvedAt, by: fixed.radar.drifts['dc_a:DD-1'].resolvedBy },
     { status: 'resolved', at: 't3', by: 'scan' }
   );
 
-  const back = applyScan(fixed.radar, { candidates: [finding('dc_a', [outdated('DD-1', 'separate channel plans')])], scannedIssueKeys: ['DD-1'], now: 't4' });
+  const back = applyScan(fixed.radar, { candidates: [finding('dc_a', [outdated('DD-1', 'separate channel plans')])], issueRecords: [staleIssue], now: 't4' });
   assert.equal(back.radar.drifts['dc_a:DD-1'].status, 'open');
   assert.equal(back.radar.drifts['dc_a:DD-1'].reopenedAt, 't4');
   assert.equal(back.radar.drifts['dc_a:DD-1'].firstSeenAt, 't1');
@@ -87,11 +101,15 @@ test('describeFindings marks new findings and lists resolved issues that no long
     findings: { dc_old: { firstSeenAt: '2026-11-01T00:00:00Z' }, dc_new: { firstSeenAt: '2026-11-12T00:00:00Z' } },
     drifts: { 'dc_old:DD-7': { findingId: 'dc_old', issueKey: 'DD-7', phrase: 'Mondays', status: 'resolved', firstSeenAt: '2026-11-01T00:00:00Z', resolvedAt: '2026-11-05T00:00:00Z', resolvedBy: 'issue-update' } }
   };
-  const [old, fresh] = describeFindings(radar, [finding('dc_old', []), finding('dc_new', [])], '2026-11-10T00:00:00Z');
+  const candidates = [finding('dc_old', []), finding('dc_new', [])];
+  const issueRecords = [{ ...updatedIssue, key: 'DD-7' }];
+  const [old, fresh] = describeFindings(radar, { candidates, issueRecords, previousVisitAt: '2026-11-10T00:00:00Z' });
   assert.equal(old.isNew, false);
   assert.equal(fresh.isNew, true);
   assert.deepEqual(old.resolvedIssues.map((r: any) => [r.issueKey, r.status, r.resolvedBy]), [['DD-7', 'resolved', 'issue-update']]);
-  const [firstVisit] = describeFindings(radar, [finding('dc_new', [])], null);
+  const [hidden] = describeFindings(radar, { candidates, issueRecords: [] });
+  assert.deepEqual(hidden.resolvedIssues, [], 'a scan cannot show history for an issue it did not read');
+  const [firstVisit] = describeFindings(radar, { candidates: [finding('dc_new', [])], issueRecords });
   assert.equal(firstVisit.isNew, false, 'nothing is "new" on a first visit');
 });
 
@@ -129,22 +147,31 @@ test('the issue-update trigger resolves a drift once the wording is gone, readin
   pages = pages.slice(0, 1);
   description = ['Scheduling: this work keeps separate channel plans for now.'];
   await scan();
-  assert.equal(Object.values(kvsMemory.get('radar:DD').drifts).filter((d: any) => d.status === 'open').length, 1);
+  assert.equal(Object.values(storedRadar('DD').drifts).filter((d: any) => d.status === 'open').length, 1);
 
   jiraCalls.length = 0;
   const statusOnly = await onIssueUpdated({ issue: { key: 'DD-1', fields: { project: { key: 'DD' } } }, changelog: { items: [{ field: 'status', fieldId: 'status' }] } });
   assert.deepEqual(statusOnly, { checked: 0, resolved: 0 });
   assert.equal(jiraCalls.length, 0, 'unrelated edits read nothing');
 
-  const stillThere = await onIssueUpdated({ issue: { key: 'DD-1', fields: { project: { key: 'DD' } } }, changelog: { items: [{ field: 'description', fieldId: 'description' }] } });
+  const descriptionEdit = { issue: { key: 'DD-1', fields: { project: { key: 'DD' } } }, changelog: { items: [{ fieldId: 'description' }] } };
+  const stillThere = await onIssueUpdated(descriptionEdit);
   assert.deepEqual(stillThere, { checked: 1, resolved: 0 });
+
+  const originalJira = g.__jira;
+  try {
+    g.__jira = (_path: string, json: any) => json({ fields: { summary: 'Plan the launch' } });
+    assert.deepEqual(await onIssueUpdated(descriptionEdit), { checked: 1, resolved: 0 }, 'missing description is not evidence');
+  } finally {
+    g.__jira = originalJira;
+  }
 
   description = ['Scheduling: this work follows the shared launch plan.'];
   jiraCalls.length = 0;
-  const fixed = await onIssueUpdated({ issue: { key: 'DD-1', fields: { project: { key: 'DD' } } }, changelog: { items: [{ field: 'description', fieldId: 'description' }] } });
+  const fixed = await onIssueUpdated(descriptionEdit);
   assert.deepEqual(fixed, { checked: 1, resolved: 1 });
   assert.deepEqual([...jiraCalls], [{ path: '/rest/api/3/issue/DD-1?fields=summary,description', asApp: true }]);
-  const drift: any = Object.values(kvsMemory.get('radar:DD').drifts)[0];
+  const drift: any = Object.values(storedRadar('DD').drifts)[0];
   assert.equal(drift.status, 'resolved');
   assert.equal(drift.resolvedBy, 'issue-update');
 
@@ -155,7 +182,7 @@ test('the issue-update trigger resolves a drift once the wording is gone, readin
 test('the radar never blocks a scan when its record cannot be read', async () => {
   const kvsModule: any = await import('./mocks/kvs.mjs');
   const get = kvsModule.kvs.get;
-  kvsModule.kvs.get = async (key: string) => { if (key.startsWith('radar:')) throw new Error('storage down'); return get(key); };
+  kvsModule.kvs.get = async (key: string) => { if (key.startsWith('radar-state:')) throw new Error('storage down'); return get(key); };
   try {
     const result = await scan();
     assert.equal(result.ok, true);

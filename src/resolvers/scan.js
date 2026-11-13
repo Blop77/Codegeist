@@ -59,12 +59,19 @@ async function projectPages(projectKey, projectId, cloudId) {
  * earlier AI passes are re-checked against these sources and returned as `aiCandidates`.
  */
 export async function scanProject(projectKey, { cloudId } = {}) {
+  // When the issue text was read: the radar orders observations by it.
+  const readAt = new Date().toISOString();
   const jql = `project = "${projectKey}" ORDER BY updated DESC`;
   const jiraResponse = await api.asUser().requestJira(
     route`/rest/api/3/search/jql?jql=${jql}&maxResults=${MAX_ISSUES}&fields=${ISSUE_FIELDS}`
   );
   if (!jiraResponse.ok) return { ok: false, error: safeError(jiraResponse.status, 'Jira') };
   const rawIssues = (await jiraResponse.json()).issues ?? [];
+  // An old project key can still find the renamed project's issues; keep its history under one key.
+  const actualProjectKey = rawIssues[0]?.fields?.project?.key;
+  if (actualProjectKey && actualProjectKey !== projectKey) {
+    return { ok: false, error: `Project ${projectKey} is now ${actualProjectKey}. Scan ${actualProjectKey} instead.` };
+  }
   const projectId = rawIssues[0]?.fields?.project?.id ?? null;
   const { pages, warnings, graph } = await projectPages(projectKey, projectId, cloudId);
 
@@ -73,16 +80,21 @@ export async function scanProject(projectKey, { cloudId } = {}) {
   const { candidates, notice } = analyze(sources, issueRecords);
   const ai = await savedAiCandidates({ projectKey, sources, issues: issueRecords, known: candidates });
   return {
-    ok: true, rawIssues, pages, warnings, candidates, notice, sources, issueRecords, graph,
+    ok: true, rawIssues, pages, warnings, candidates, notice, sources, issueRecords, graph, readAt,
     aiCandidates: ai.candidates, aiSavedAt: ai.savedAt
   };
 }
 
 /** Scans one issue and its project's pages, keeping only findings that point at that issue. */
 export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
+  const readAt = new Date().toISOString();
   const issueResponse = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}?fields=${ISSUE_FIELDS}`);
   if (!issueResponse.ok) return { ok: false, error: safeError(issueResponse.status, 'Jira issue lookup') };
   const rawIssue = await issueResponse.json();
+  // Jira answers an old key with the moved issue; record its history under its current key only.
+  if (rawIssue.key !== issueKey || (rawIssue.fields?.project?.key ?? projectKey) !== projectKey) {
+    return { ok: false, error: `${issueKey} has moved to ${rawIssue.key}. Open ${rawIssue.key} instead.` };
+  }
   const { pages, warnings, graph } = await projectPages(projectKey, rawIssue.fields?.project?.id ?? null, cloudId);
 
   const sources = [...pages, ...issueSources(rawIssue, projectKey)];
@@ -92,6 +104,7 @@ export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
   const pointsHere = (c) => c.affectedIssues.some((a) => a.issueKey === rawIssue.key);
   return {
     ok: true,
+    readAt,
     sources,
     issueRecords,
     rawIssue,
@@ -102,6 +115,18 @@ export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
     aiCandidates: ai.candidates.filter(pointsHere),
     notice
   };
+}
+
+/**
+ * One issue's current summary and description, read directly as the user (strongly consistent,
+ * unlike JQL search). Null when it can't be read or has moved.
+ */
+export async function readIssueRecord(issueKey, projectKey) {
+  const response = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}?fields=summary,description,project,updated`);
+  if (!response.ok) return null;
+  const rawIssue = await response.json();
+  if (rawIssue.key !== issueKey || (rawIssue.fields?.project?.key ?? projectKey) !== projectKey) return null;
+  return toIssueRecord(rawIssue, projectKey);
 }
 
 /** Resolve a finding using the caller's current access and verify that it still matches this issue. */

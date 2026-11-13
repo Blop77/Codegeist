@@ -1,0 +1,4 @@
+Labels frozen before any rules or model ran on benchmark/recall/.
+Frozen: 2026-11-12T19:36:00Z
+sha256(labels-recall.json): 90440737fd58a3093d5119b58ea7dca499762933a47236b6b8c3f1401ce2106f
+sha256(sources-recall.tsv): 593b6578643eefcca476686a87d57d51e8e3f4cf18c14262d4b934be3c72f905

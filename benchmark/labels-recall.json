@@ -1,0 +1,92 @@
+{
+  "protocol": "Recall set: decisions only. Labelled by hand from the prepared text and frozen (checksum in recall/FROZEN.txt) before any rules or model were run on these files. decision: the notes record that the group decided, agreed, approved or resolved something, or reached consensus. ambiguous: true marks borderline sentences (action items, plans, individual opinions, deferrals); a decision finding that matches one is not scored. Only decision findings are scored on this set; open questions and proposals are ignored.",
+  "documents": [
+    {
+      "file": "openjs-cpc-2025-05-27.md",
+      "labels": [
+        { "kind": "decision", "text": "There is general agreement to wait for version 3." },
+        { "kind": "decision", "text": "The goal is to have this in place by August 1st so it’s in place before JSConf.", "ambiguous": true },
+        { "kind": "decision", "text": "Will work on cpc/readme and org profile information organization and such", "ambiguous": true },
+        { "kind": "decision", "text": "We can pool our resources.", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "openjs-cpc-2025-05-13.md",
+      "labels": [
+        { "kind": "decision", "text": "Review Code of Conduct audit from Kate and focus on next steps", "ambiguous": true },
+        { "kind": "decision", "text": "Discuss with Rudd what security requirements we want to make mandatory for OpenJS projects.", "ambiguous": true },
+        { "kind": "decision", "text": "there needs to be a legal framework and an operational approach", "ambiguous": true },
+        { "kind": "decision", "text": "Joe checking timeline for 3.0 release", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "openjs-cpc-2025-04-29.md",
+      "labels": [
+        { "kind": "decision", "text": "There was discussion and it was decided to have a conversation between him and the CPC directors." },
+        { "kind": "decision", "text": "There was consensus in the last call to wait for V3." },
+        { "kind": "decision", "text": "This consensus was reiterated today.", "ambiguous": true },
+        { "kind": "decision", "text": "Joe will reach out to see if there is a timeline for V3.", "ambiguous": true },
+        { "kind": "decision", "text": "Tobie, Matteo, and Joe were re-elected.", "ambiguous": true },
+        { "kind": "decision", "text": "Ben will discuss with that group and come back with a recommendation prior to next CPC call.", "ambiguous": true },
+        { "kind": "decision", "text": "Agreed this will be the topic for the next working group meeting" },
+        { "kind": "decision", "text": "all pending changes were approved" },
+        { "kind": "decision", "text": "Folks are encouraged to review V3.", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "openjs-cpc-2025-04-15.md",
+      "labels": [
+        { "kind": "decision", "text": "There was consensus on adoption 3.0 and no voiced objections." },
+        { "kind": "decision", "text": "There were no objections to the change voiced in the call and it was therefore approved" },
+        { "kind": "decision", "text": "TL → agrees that we should wait on 3, there is not a large difference between 2 and 2.1.", "ambiguous": true },
+        { "kind": "decision", "text": "Ben → will bring this up in the next security working group", "ambiguous": true },
+        { "kind": "decision", "text": "Work continues in the next working session.", "ambiguous": true },
+        { "kind": "decision", "text": "Ben will invite Nathan and Tobie into a meeting to discuss.", "ambiguous": true },
+        { "kind": "decision", "text": "Continue CoC work.", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-lang-team-2022-11-08.md",
+      "labels": [
+        { "kind": "decision", "text": "We definitely want this feature." },
+        { "kind": "decision", "text": "CONCLUSION: pnkfelix to comment on the issue." },
+        { "kind": "decision", "text": "consensus: no" },
+        { "kind": "decision", "text": "Discussed in the context of FCPs, un-nominated.", "ambiguous": true },
+        { "kind": "decision", "text": "Discussed in the context of FCPs, un-nominated.", "ambiguous": true },
+        { "kind": "decision", "text": "nikomatsakis: i'm okay with making this an Unresolved Question.", "ambiguous": true },
+        { "kind": "decision", "text": "nikomatsakis: I feel like we want upcasting and we are going to want to allow libstd to do it", "ambiguous": true },
+        { "kind": "decision", "text": "joshtriplett: Concern is to explore syntax, especially for the most common cases (e.g., \"sealed\" instead of `impl crate`).", "ambiguous": true },
+        { "kind": "decision", "text": "I don't want to block the RFC on bikeshedding.", "ambiguous": true },
+        { "kind": "decision", "text": "we can always change the syntax before stabilization.", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-polonius-wg-2019-05-14.md",
+      "labels": [
+        { "kind": "decision", "text": "There may not necessarily be a meeting sometimes (TBD), but async updates will be available on Zulip in any case.", "ambiguous": true },
+        { "kind": "decision", "text": "[Albin] will tackle the remaining final liveness.", "ambiguous": true },
+        { "kind": "decision", "text": "[Rémy] will continue on the rustc test suite results (fix the trivial differences, etc) and time permitting, help with the final liveness tasks.", "ambiguous": true },
+        { "kind": "decision", "text": "[@lokalmatador] will continue their benchmarking endeavour.", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-polonius-wg-2019-05-07.md",
+      "labels": [
+        { "kind": "decision", "text": "even though we always think about the topic, we noticed analyzing the test suite, tests and correctness, are tasks which should actually be mentioned in the Roadmap.", "ambiguous": true },
+        { "kind": "decision", "text": "[Albin] will continue on liveness.", "ambiguous": true },
+        { "kind": "decision", "text": "To get ahead of the liveness game, [Niko] will look at and describe more of the `drop` specifics.", "ambiguous": true },
+        { "kind": "decision", "text": "[Rémy] will continue on the rustc test suite results, especially on top of #60171.", "ambiguous": true }
+      ]
+    },
+    {
+      "file": "rust-polonius-wg-2019-04-30.md",
+      "labels": [
+        { "kind": "decision", "text": "A first step will be to look into rustc's test suite failures, `ignore`ing irrelevant tests or add `bless`ed output, at the very least to track changes and regressions more easily.", "ambiguous": true },
+        { "kind": "decision", "text": "The WIP plan about polonius features and rustc integration/subsumption looks clear:", "ambiguous": true },
+        { "kind": "decision", "text": "[Albin] will continue on liveness.", "ambiguous": true },
+        { "kind": "decision", "text": "[Rémy] will look at the rustc tests in more detail.", "ambiguous": true },
+        { "kind": "decision", "text": "[Niko] will prepare the next steps in the liveness, to stay ahead of [Albin]'s progress.", "ambiguous": true }
+      ]
+    }
+  ]
+}

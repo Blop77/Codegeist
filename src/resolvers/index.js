@@ -1,7 +1,7 @@
 import Resolver from '@forge/resolver';
 import api, { route, storage } from '@forge/api';
 import { toIssueSummary } from './normalize';
-import { analyze, resolveFindingForIssue, safeError, scanIssue, scanProject, validProjectKey } from './scan';
+import { analyze, readIssueRecord, resolveFindingForIssue, safeError, scanIssue, scanProject, validProjectKey } from './scan';
 import { SAMPLE_GRAPH, SAMPLE_PROJECT_KEY, sampleIssues, sampleSources } from './sample-data';
 import { draftNoteWithAi, findWithAi } from './ai';
 import { confirmRovoDraft, loadRovoDraft } from './rovo-drafts';
@@ -32,8 +32,10 @@ resolver.define('getProjectRadar', async ({ payload, context }) => {
     const previousVisitAt = await lastVisit(context?.accountId, projectKey);
     const tracked = await trackScan(projectKey, {
       candidates: reviewed,
-      scannedIssueKeys: rawIssues.map((issue) => issue.key),
-      previousVisitAt
+      issueRecords: scanned.issueRecords,
+      previousVisitAt,
+      observedAt: scanned.readAt,
+      confirmIssue: (issueKey) => readIssueRecord(issueKey, projectKey)
     });
     await saveVisit(context?.accountId, projectKey);
     const candidates = tracked.candidates.slice(0, extractedCandidates.length);
@@ -72,7 +74,7 @@ resolver.define('getIssueDecisionContext', async ({ payload, context }) => {
     if (!scanned.ok) return { ok: false, error: scanned.error };
     const { warnings, candidates: forIssue, notice, graph } = scanned;
     const { candidates: reviewed, reviewWarning } = await attachReviewState(projectKey, [...forIssue, ...scanned.aiCandidates]);
-    const tracked = await trackScan(projectKey, { candidates: reviewed, scannedIssueKeys: [scanned.rawIssue.key] });
+    const tracked = await trackScan(projectKey, { candidates: reviewed, issueRecords: scanned.issueRecords, observedAt: scanned.readAt });
 
     return {
       ok: true, issueKey, candidates: tracked.candidates, notice, reviewWarning, warnings, graph,

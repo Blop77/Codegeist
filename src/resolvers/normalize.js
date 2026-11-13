@@ -142,7 +142,7 @@ export function toIssueRecord(issue, projectKey) {
     id: String(issue.id ?? issue.key),
     key: issue.key,
     title: issue.fields?.summary ?? '',
-    description: adfToText(issue.fields?.description),
+    description: issue.fields?.description === undefined ? undefined : adfToText(issue.fields.description),
     projectKey,
     status: issue.fields?.status?.name ?? undefined,
     labels: issue.fields?.labels ?? [],
