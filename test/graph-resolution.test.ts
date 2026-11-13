@@ -59,6 +59,8 @@ test('Teamwork Graph decision → person edits the issue → trigger resolves �
   const resolved = driftOn(panel);
   assert.equal(resolved.status, 'resolved');
   assert.equal(resolved.resolvedBy, 'issue-update', 'shown as "noticed when the issue was edited"');
+  assert.equal(resolved.replacement, 'after the website update');
+  assert.equal(resolved.replacementFound, true, 'the corrected schedule contains the decided wording');
   assert.match(resolved.via, /^Teamwork Graph/);
 
   description = [ORIGINAL];
@@ -88,4 +90,29 @@ test('a moved issue or renamed project key is refused instead of filing history 
   } finally {
     g.__jira = original;
   }
+});
+
+test('deleting the old line only removes the old wording; restoring it reopens the drift', async () => {
+  description = [ORIGINAL];
+  const before = await handler.getProjectRadar({ payload: { projectKey: 'MK' }, context: ctx });
+  const opened = driftOn(before);
+  assert.equal(opened.status, 'open');
+
+  // The scheduling line is deleted outright: the old phrase is gone, but nothing replaced it.
+  description = ['A series of social posts for the launch.'];
+  assert.deepEqual(await onIssueUpdated({ issue: { key: 'MK-10', fields: { project: { key: 'MK' } } }, changelog: { items: [{ fieldId: 'description' }] } }), { checked: 1, resolved: 1 });
+  // With the line gone the decision no longer matches MK-10, so the project page lists the drift
+  // under "Resolved since it was found" rather than under the issue.
+  const scan = await handler.getProjectRadar({ payload: { projectKey: 'MK' }, context: ctx });
+  const removed = driftOn(scan);
+  assert.equal(removed.status, 'resolved');
+  assert.equal(removed.resolvedBy, 'issue-update');
+  assert.equal(removed.replacement, 'after the website update');
+  assert.equal(removed.replacementFound, false, 'shown as "Old wording removed" without "Replacement wording found"');
+
+  description = [ORIGINAL];
+  const after = await handler.getProjectRadar({ payload: { projectKey: 'MK' }, context: ctx });
+  const reopened = driftOn(after);
+  assert.equal(reopened.status, 'open');
+  assert.equal(reopened.firstSeenAt, opened.firstSeenAt, 'the original drift date is kept');
 });

@@ -216,7 +216,7 @@ test('a viewer sees drift history only for findings and issues their own scan re
   const shown = JSON.stringify(described);
   assert.ok(!shown.includes('DD-9') && !shown.includes('secret phrase'), 'an unreadable issue’s key and phrase are not shown');
   assert.ok(!shown.includes('restricted page phrase'), 'a finding the viewer cannot read is not shown');
-  assert.deepEqual(radarSummary(described), { findings: 1, newSinceLastVisit: 0, drifting: 1, resolved: 0 }, 'counts cover only what the viewer can read');
+  assert.deepEqual(radarSummary(described), { findings: 1, newSinceLastVisit: 0, drifting: 1, resolved: 0, issuesDrifting: 1 }, 'counts cover only what the viewer can read');
 });
 
 test('a project scan re-reads an issue before reopening it, so a lagging search result cannot', async () => {

@@ -245,14 +245,28 @@ const shortDate = (value) => (value ? new Date(value).toLocaleDateString() : '')
 function DriftLine({ drift }) {
   if (!drift) return null;
   if (drift.status === 'resolved') {
+    // Removing the old wording is all the app has verified; a replacement is shown only when the
+    // decision names one and the issue's current text contains it.
     return (
-      <Inline space="space.100" alignBlock="center">
-        <Lozenge appearance="success">Resolved</Lozenge>
-        <Text>
-          No longer mentions “{drift.phrase}” · {shortDate(drift.resolvedAt)}
-          {drift.resolvedBy === 'issue-update' ? ' · noticed when the issue was edited' : ' · found by a later scan'}
-        </Text>
-      </Inline>
+      <Stack space="space.025">
+        <Inline space="space.100" alignBlock="center">
+          <Lozenge appearance="success">Old wording removed</Lozenge>
+          {drift.replacementFound && <Lozenge appearance="success">Replacement wording found</Lozenge>}
+          <Text>
+            No longer mentions “{drift.phrase}” · {shortDate(drift.resolvedAt)}
+            {drift.resolvedBy === 'issue-update' ? ' · noticed when the issue was edited' : ' · found by a later scan'}
+          </Text>
+        </Inline>
+        {drift.replacement && (
+          <Text>
+            <Em>
+              {drift.replacementFound
+                ? `Now mentions “${drift.replacement}”, the wording the decision asks for.`
+                : `The decision's wording (“${drift.replacement}”) is not in the issue yet. Check the issue says what was decided.`}
+            </Em>
+          </Text>
+        )}
+      </Stack>
     );
   }
   return <Text><Em>Drifting since {shortDate(drift.firstSeenAt)}: the issue still says “{drift.phrase}”.</Em></Text>;
