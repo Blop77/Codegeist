@@ -11,7 +11,7 @@ How to install Decision Drift Radar on your own Atlassian site and see it workin
 
 1. Open the installation link and choose your site.
 2. Install the app into **Jira** first. Jira is required.
-3. Open the link again (or use **Connected apps**) and add **Confluence** on the same site. Without this step, Confluence pages cannot be read and the app shows a "Confluence source search unavailable" warning. Jira issues and comments are still scanned.
+3. Open the link again (or use **Connected apps**) and add **Confluence** on the same site. Without this step, Confluence pages cannot be read and the app shows a "Confluence project-key search unavailable" warning. Jira issues and comments are still scanned.
 4. Approve the permissions:
 
 | Permission | Why the app needs it |
@@ -123,7 +123,7 @@ Status updates go out on Mondays.
 
 Teamwork Graph can take a few minutes to index new team links. Until then there is no **Context from Teamwork Graph** box, and a line under the scan summary says "Teamwork Graph shows no Atlassian team linked to KEY…". Wait a few minutes and scan again. Without Part 3, the scan works as in Part 2 and shows that same line.
 
-**6. Follow the same finding through to resolution.** On a build that includes the Jira issue-update trigger, replace only the line from step 4 with `Status updates go out on Fridays.` Save and leave the Radar project page and issue panel closed for about four minutes. Then open the issue panel. If the finding is still shown there, look for **Resolved** and **No longer mentions “on Mondays”**, followed by **noticed when the issue was edited**. The project page also shows the resolution, including under **Resolved since it was found** if the updated issue no longer matches the decision. If a scan recorded it first, the reason reads **found by a later scan**. This verifies the issue wording. The underlying work may still need to be carried out.
+**6. Follow the same finding through to resolution.** Replace only the line from step 4 with `Status updates go out on Fridays.` Save and leave the Radar project page and issue panel closed for about four minutes. Then open the issue panel. If the finding is still shown there, look for **Resolved** and **No longer mentions “on Mondays”**, followed by **noticed when the issue was edited**. The project page also shows the resolution, including under **Resolved since it was found** if the updated issue no longer matches the decision. If a scan recorded it first, the reason reads **found by a later scan**. This verifies the issue wording. The underlying work may still need to be carried out.
 
 If something in the Teamwork Graph path fails, the scan still completes and that line says which step failed, keeping what was found before it:
 
@@ -149,9 +149,9 @@ To try a Rovo draft, choose an affected issue without a posted note and ask **�
 
 | What you see | What to do |
 | --- | --- |
-| "Confluence source search unavailable" | The app is not installed into Confluence on this site. Repeat install step 3. |
+| "Confluence project-key search unavailable" | The app is not installed into Confluence on this site. Repeat install step 3. |
 | "No matching Confluence pages found" | The page must contain the project key as text. Search indexing can also lag by a minute. |
-| "No decisions detected" | The scan looks for explicit wording such as "Decision:", "we agreed" or "we decided to". Check the page text matches step 1. |
+| "No findings detected" | The scan looks for explicit wording such as "Decision:", "we agreed" or "we decided to". Check the page text matches step 1. |
 | The decision appears but `KEY-1` has no "still mentions" reason | The issue description must contain the exact phrase "separate channel plans". |
 | "You do not have permission to comment" | Your account needs permission to add comments in that project. Nothing was posted. |
 
@@ -162,8 +162,10 @@ To try a Rovo draft, choose an affected issue without a posted note and ask **�
 - It reads the 50 most recently updated issues, up to 20 project-key search pages, up to 10 additional team-space pages and up to 10 linked pages. Results depend on permissions and search/Graph indexing.
 - The main scan works on English text with explicit decision wording and uses no AI model, so the same input always gives the same findings. The optional AI pass finds indirectly worded decisions; it keeps a finding only if its quote is found word for word in the source, and a usage counter targets 40 runs per site per day, without an atomic concurrent-request guarantee. Verified AI-pass findings are saved per project, checked again against the current sources on every scan, and shown on the project page, the issue panel and in Rovo; they disappear if their quote is no longer in the source. **Draft with AI** counts towards the same daily limit.
 
-## Verification notes (12 November 2026)
+## Verification notes (12–13 November 2026)
 
-Production 3.3.0 was checked on the judge test site. The sample scan worked, Teamwork Graph discovered a decision page that omitted the Jira project key, and the reviewed note appeared on the issue. A rescan offered no duplicate note. Rovo was unavailable on that site. Draft preparation and posting from the Jira issue panel were checked on the development demo site. Jira may label project navigation **Space navigation**; use the same Apps entry within that space. Extra existing decision pages can add findings beyond the minimal test example, especially through Teamwork Graph.
+Production 3.7.0 was checked on the judge test site on 13 November: a project scan found the Teamwork Graph team link, a decision page in that team's space and two drifts.
+
+Production 3.3.0 was checked on the judge test site on 12 November. The sample scan worked, Teamwork Graph discovered a decision page that omitted the Jira project key, and the reviewed note appeared on the issue. A rescan offered no duplicate note. Rovo was unavailable on that site. Draft preparation and posting from the Jira issue panel were checked on the development demo site. Jira may label project navigation **Space navigation**; use the same Apps entry within that space. Extra existing decision pages can add findings beyond the minimal test example, especially through Teamwork Graph.
 
 The app reserves the finding and issue before posting and can recover a missing receipt from the Jira comment. If a write remains uncertain, check the issue’s comments before retrying.

@@ -12,6 +12,9 @@ const ISSUE_FIELDS = 'summary,status,labels,updated,description,comment,reporter
 const MAX_CANDIDATES = 50;
 const MAX_ISSUES = 50;
 const MAX_PAGES = 20;
+// Teamwork Graph lookups stop starting new requests after this long, so a scan stays well within
+// Forge's 25-second limit for a resolver.
+const GRAPH_BUDGET_MS = 12000;
 
 export function validProjectKey(projectKey) {
   return /^[A-Z][A-Z0-9_]{1,9}$/.test(projectKey);
@@ -21,6 +24,7 @@ export function safeError(status, product) {
   if (status === 401 || status === 403) {
     return `${product} denied access. Check your account access and the app's granted permissions.`;
   }
+  if (status === 429) return `${product} is limiting requests right now. Wait a minute, then scan again.`;
   return `${product} could not complete the request (HTTP ${status}).`;
 }
 
@@ -45,12 +49,60 @@ export function analyze(sources, issues) {
   return { candidates, notice: truncated?.message ?? null };
 }
 
-/** Page sources from the key search plus those found through the Teamwork Graph. */
-async function projectPages(projectKey, projectId, cloudId) {
-  const { pages, warnings } = await searchDecisionPages(projectKey);
+/**
+ * Page sources from the key search plus those found through the Teamwork Graph. `keySearch` is
+ * the already started key search, so it runs alongside the Jira reads.
+ */
+async function projectPages(projectKey, projectId, cloudId, keySearch, deadline) {
+  const { pages, warnings } = await keySearch;
   const knownPageIds = pages.map((page) => page.id.replace(/^page-/, ''));
-  const { pages: graphPages, summary } = await discoverViaGraph({ projectKey, projectId, cloudId, knownPageIds });
+  const { pages: graphPages, summary } = await discoverViaGraph({ projectKey, projectId, cloudId, knownPageIds, deadline });
   return { pages: [...pages, ...graphPages], warnings, graph: summary };
+}
+
+/** The 50 most recently updated issues of a project, read through search. */
+async function searchProjectIssues(projectKey) {
+  const jql = `project = "${projectKey}" ORDER BY updated DESC`;
+  const response = await api.asUser().requestJira(
+    route`/rest/api/3/search/jql?jql=${jql}&maxResults=${MAX_ISSUES}&fields=${ISSUE_FIELDS}`
+  );
+  if (!response.ok) return { ok: false, status: response.status };
+  return { ok: true, rawIssues: (await response.json()).issues ?? [] };
+}
+
+/** Up to three visible projects whose name or key resembles `text`, as "Name (KEY)". */
+async function similarProjects(text) {
+  try {
+    const response = await api.asUser().requestJira(route`/rest/api/3/project/search?query=${text}&maxResults=3`);
+    if (!response.ok) return [];
+    return ((await response.json()).values ?? [])
+      .filter((project) => validProjectKey(project.key ?? ''))
+      .map((project) => `${project.name ?? project.key} (${project.key})`);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The project itself, read as the user: its id (which Teamwork Graph needs even when the project
+ * has no issues yet) and its current key. An unknown key gets a plain message naming similar
+ * projects, since people often type a project's name instead of its key.
+ */
+export async function lookUpProject(projectKey) {
+  const response = await api.asUser().requestJira(route`/rest/api/3/project/${projectKey}`);
+  if (response.ok) {
+    const project = await response.json();
+    if (project?.key && project.key !== projectKey) {
+      return { ok: false, error: `Project ${projectKey} is now ${project.key}. Scan ${project.key} instead.` };
+    }
+    return { ok: true, id: project?.id ?? null };
+  }
+  if (response.status === 404) {
+    const similar = await similarProjects(projectKey);
+    const hint = similar.length > 0 ? ` Did you mean ${similar.join(' or ')}?` : ' Check the key in the project\'s settings.';
+    return { ok: false, error: `No Jira project with the key ${projectKey} is visible to you.${hint}` };
+  }
+  return { ok: false, error: safeError(response.status, 'Jira project lookup') };
 }
 
 /**
@@ -61,19 +113,36 @@ async function projectPages(projectKey, projectId, cloudId) {
 export async function scanProject(projectKey, { cloudId } = {}) {
   // When the issue text was read: the radar orders observations by it.
   const readAt = new Date().toISOString();
-  const jql = `project = "${projectKey}" ORDER BY updated DESC`;
-  const jiraResponse = await api.asUser().requestJira(
-    route`/rest/api/3/search/jql?jql=${jql}&maxResults=${MAX_ISSUES}&fields=${ISSUE_FIELDS}`
-  );
-  if (!jiraResponse.ok) return { ok: false, error: safeError(jiraResponse.status, 'Jira') };
-  const rawIssues = (await jiraResponse.json()).issues ?? [];
+  const deadline = Date.now() + GRAPH_BUDGET_MS;
+  const keySearch = searchDecisionPages(projectKey);
+  const searched = await searchProjectIssues(projectKey);
+  if (!searched.ok) {
+    await keySearch.catch(() => null);
+    // Jira search answers an unknown project with HTTP 400; say which key was not found instead.
+    if (searched.status === 400 || searched.status === 404) {
+      const project = await lookUpProject(projectKey);
+      if (!project.ok) return project;
+    }
+    return { ok: false, error: safeError(searched.status, 'Jira') };
+  }
+  const { rawIssues } = searched;
   // An old project key can still find the renamed project's issues; keep its history under one key.
   const actualProjectKey = rawIssues[0]?.fields?.project?.key;
   if (actualProjectKey && actualProjectKey !== projectKey) {
+    await keySearch.catch(() => null);
     return { ok: false, error: `Project ${projectKey} is now ${actualProjectKey}. Scan ${actualProjectKey} instead.` };
   }
-  const projectId = rawIssues[0]?.fields?.project?.id ?? null;
-  const { pages, warnings, graph } = await projectPages(projectKey, projectId, cloudId);
+  let projectId = rawIssues[0]?.fields?.project?.id ?? null;
+  if (rawIssues.length === 0) {
+    // No issue carries the project id, which Teamwork Graph needs; read the project instead.
+    const project = await lookUpProject(projectKey);
+    if (!project.ok) {
+      await keySearch.catch(() => null);
+      return project;
+    }
+    projectId = project.id;
+  }
+  const { pages, warnings, graph } = await projectPages(projectKey, projectId, cloudId, keySearch, deadline);
 
   const sources = [...pages, ...rawIssues.flatMap((issue) => issueSources(issue, projectKey))];
   const issueRecords = rawIssues.map((issue) => toIssueRecord(issue, projectKey));
@@ -85,34 +154,57 @@ export async function scanProject(projectKey, { cloudId } = {}) {
   };
 }
 
-/** Scans one issue and its project's pages, keeping only findings that point at that issue. */
+/**
+ * Scans one issue the way the project scan sees it: the issue (read directly, so an edit shows
+ * at once), the project's other recent issues and its pages. Matching weighs a word by how many
+ * of the project's issues use it, and a decision can be recorded on another issue, so reading
+ * the issue alone would disagree with the project scan. Keeps only findings that point at this
+ * issue, each narrowed to this issue.
+ */
 export async function scanIssue(issueKey, projectKey, { cloudId } = {}) {
   const readAt = new Date().toISOString();
-  const issueResponse = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}?fields=${ISSUE_FIELDS}`);
-  if (!issueResponse.ok) return { ok: false, error: safeError(issueResponse.status, 'Jira issue lookup') };
+  const deadline = Date.now() + GRAPH_BUDGET_MS;
+  const keySearch = searchDecisionPages(projectKey);
+  const [issueResponse, searched] = await Promise.all([
+    api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}?fields=${ISSUE_FIELDS}`),
+    searchProjectIssues(projectKey)
+  ]);
+  if (!issueResponse.ok) {
+    await keySearch.catch(() => null);
+    return { ok: false, error: safeError(issueResponse.status, 'Jira issue lookup') };
+  }
   const rawIssue = await issueResponse.json();
   // Jira answers an old key with the moved issue; record its history under its current key only.
   if (rawIssue.key !== issueKey || (rawIssue.fields?.project?.key ?? projectKey) !== projectKey) {
+    await keySearch.catch(() => null);
     return { ok: false, error: `${issueKey} has moved to ${rawIssue.key}. Open ${rawIssue.key} instead.` };
   }
-  const { pages, warnings, graph } = await projectPages(projectKey, rawIssue.fields?.project?.id ?? null, cloudId);
+  const { pages, warnings, graph } = await projectPages(projectKey, rawIssue.fields?.project?.id ?? null, cloudId, keySearch, deadline);
+  if (!searched.ok) warnings.push('Could not read the project\'s other issues, so this issue was matched on its own.');
 
-  const sources = [...pages, ...issueSources(rawIssue, projectKey)];
-  const issueRecords = [toIssueRecord(rawIssue, projectKey)];
-  const { candidates, notice } = analyze(sources, issueRecords);
-  const ai = await savedAiCandidates({ projectKey, sources, issues: issueRecords, known: candidates });
-  const pointsHere = (c) => c.affectedIssues.some((a) => a.issueKey === rawIssue.key);
+  const others = searched.ok
+    ? searched.rawIssues.filter((issue) => issue.key !== rawIssue.key && issue.fields?.project?.key === projectKey)
+    : [];
+  const rawIssues = [rawIssue, ...others];
+  const sources = [...pages, ...rawIssues.flatMap((issue) => issueSources(issue, projectKey))];
+  const projectRecords = rawIssues.map((issue) => toIssueRecord(issue, projectKey));
+  const { candidates, notice } = analyze(sources, projectRecords);
+  const ai = await savedAiCandidates({ projectKey, sources, issues: projectRecords, known: candidates });
+  const forThisIssue = (list) => list
+    .filter((c) => c.affectedIssues.some((a) => a.issueKey === issueKey))
+    .map((c) => ({ ...c, affectedIssues: c.affectedIssues.filter((a) => a.issueKey === issueKey) }));
   return {
     ok: true,
     readAt,
     sources,
-    issueRecords,
+    // Only this issue: drift for other issues is recorded by project scans, which read them all.
+    issueRecords: [projectRecords[0]],
     rawIssue,
     pages,
     warnings,
     graph,
-    candidates: candidates.filter(pointsHere),
-    aiCandidates: ai.candidates.filter(pointsHere),
+    candidates: forThisIssue(candidates),
+    aiCandidates: forThisIssue(ai.candidates),
     notice
   };
 }
@@ -131,20 +223,11 @@ export async function readIssueRecord(issueKey, projectKey) {
 
 /** Resolve a finding using the caller's current access and verify that it still matches this issue. */
 export async function resolveFindingForIssue({ projectKey, issueKey, candidateId, cloudId }) {
+  // The issue scan reads the project's other issues too, so findings recorded on another issue
+  // are found here without a second, full project scan.
   const issue = await scanIssue(issueKey, projectKey, { cloudId });
   if (!issue.ok) return issue;
-  if (issue.rawIssue.key !== issueKey || (issue.rawIssue.fields?.project?.key ?? projectKey) !== projectKey) {
-    return { ok: false, error: 'This Jira issue has moved. Refresh the scan and try again.' };
-  }
-
-  const matches = (candidate) => candidate.id === candidateId
-    && candidate.affectedIssues.some((affected) => affected.issueKey === issueKey);
-  let candidate = [...issue.candidates, ...issue.aiCandidates].find(matches);
-  if (!candidate) {
-    // A project finding can originate from another issue in the same project.
-    const project = await scanProject(projectKey, { cloudId });
-    if (project.ok) candidate = [...project.candidates, ...project.aiCandidates].find(matches);
-  }
+  const candidate = [...issue.candidates, ...issue.aiCandidates].find((c) => c.id === candidateId);
   if (!candidate) {
     return { ok: false, error: `This finding no longer points at ${issueKey}, or you can no longer see its source. Refresh the scan and try again.` };
   }

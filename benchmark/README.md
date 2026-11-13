@@ -25,7 +25,7 @@ A third, fresh set measures the decision-recall gap. It uses 8 more files chosen
 
 ## Historical: held-out set (notes the rules were never tuned on)
 
-| Held-out set: precision / recall | Before tuning | After tuning |
+| Held-out set: precision / recall | Before tuning | After tuning (first run, before the apostrophe fix) |
 | --- | --- | --- |
 | Anything flagged (kind ignored) | 61% / 59% | **67% / 70%** |
 | Decisions | 100% / 25% | 100% / 25% |
@@ -36,11 +36,11 @@ A third, fresh set measures the decision-recall gap. It uses 8 more files chosen
 
 **What this says, plainly**
 
-- **Precision on decisions is perfect, recall is low.** Every decision the rules flagged was a real decision, in both sets, before and after tuning. But they find only about a quarter to a third of the decisions in real notes. In the app, a finding is shown to a person and can become a Jira comment, so precision is the property we protect. Recall is the known gap, and the reason for the optional AI pass.
+- **Precision on decisions is perfect on small numbers, recall is low.** Every decision the rules flagged was a real decision, in both sets, before and after tuning: 2 flagged decisions on the held-out set and 7 on the recall set. But they find only about a quarter to a third of the decisions in real notes. In the app, a finding is shown to a person and can become a Jira comment, so precision is the property we protect. Recall is the known gap, and the reason for the optional AI pass.
 - **Tuning helped questions and proposals, not decisions.** On the files used for tuning, decision recall rose from 30% to 70%. On the held-out files it did not move (25%). The new decision phrasings ("Decide to…", "General agreement that…", "decided against") are real but rare. The held-out misses are phrased differently again: "Let’s not block the sub-issues on this.", "We clarified that…", "It was also deemed…", "pnkfelix to report consensus…".
 - **Most false alarms come from chat transcripts.** In the Rust language team transcript, conversational questions that are answered moments later ("scottmcm: are we sure we can do that?") are flagged as open questions.
 
-**A bug found by the held-out run.** Typographic apostrophes ("Let’s", which Confluence often stores) were not recognised by any rule. This was fixed after the held-out run, so it doesn't affect the headline numbers. With the fix, the held-out "anything flagged" score is 69% / 78%, and decisions are unchanged at 100% / 25%. [RESULTS.md](RESULTS.md) is generated from the current rules, so it includes the fix.
+**A bug found by the held-out run.** Typographic apostrophes ("Let’s", which Confluence often stores) were not recognised by any rule. This was fixed after the held-out run, so it doesn't affect the headline numbers. With the fix, the held-out "anything flagged" score is 69% / 78%, decisions are unchanged at 100% / 25%, and proposal precision falls from 75% to 63%. [RESULTS.md](RESULTS.md) is generated from the current rules, so it includes the fix.
 
 ## Historical: development set (used for tuning)
 
@@ -63,11 +63,11 @@ Files were chosen by a fixed rule decided before reading them: the most recent m
 | | Rust language team 2022-11-22 | [rust-lang/lang-team](https://github.com/rust-lang/lang-team) `minutes/` | Apache-2.0 |
 | | Rust traits working group 2019-02-24, 03-04, 03-11 | [rust-lang/compiler-team](https://github.com/rust-lang/compiler-team) `content/working-groups/traits/minutes/` | Apache-2.0 |
 | Held-out (`heldout/`) | OpenJS CPC 2025-06-09, 06-24, 07-08, 07-22 | as above | MIT |
+| | Rust language team 2022-11-15 | as above | Apache-2.0 |
+| | Rust Polonius working group 2019-05-28, 06-04, 06-11 | [rust-lang/compiler-team](https://github.com/rust-lang/compiler-team) `content/working-groups/polonius/minutes/` | Apache-2.0 |
 | Recall (`recall/`) | OpenJS CPC 2025-04-15, 04-29, 05-13, 05-27 | as above | MIT |
 | | Rust language team 2022-11-08 | as above | Apache-2.0 |
 | | Rust Polonius working group 2019-04-30, 05-07, 05-14 | as above | Apache-2.0 |
-| | Rust language team 2022-11-15 | as above | Apache-2.0 |
-| | Rust Polonius working group 2019-05-28, 06-04, 06-11 | [rust-lang/compiler-team](https://github.com/rust-lang/compiler-team) `content/working-groups/polonius/minutes/` | Apache-2.0 |
 
 The traits working group has only three minutes files, so the held-out set takes its three prose summaries from the Polonius working group instead. That rule was stated before reading them: the next working group in the same repository with the most minutes.
 
@@ -82,7 +82,7 @@ Files are unmodified copies. [sources.tsv](sources.tsv), [sources-heldout.tsv](s
    - **proposal**: a suggestion put to the group that is not recorded as decided.
 
    Questions answered later in the notes are not labelled, so flagging one counts as a false alarm. A script checks that every label appears verbatim.
-3. **Ambiguous labels** mark borderline sentences: action items ("X will…", "Next step: …"), deferrals, agenda boilerplate and tentative plans. A finding that matches an ambiguous label counts neither for nor against the extractor.
+3. **Ambiguous labels** mark borderline sentences: action items ("X will…", "Next step: …"), deferrals, agenda boilerplate and tentative plans. A finding that matches an ambiguous label counts neither for nor against the extractor. This matters for precision: on the held-out set, 15 of the 57 findings (26%) matched ambiguous labels and were not scored. Precision is 69% over the 42 scored findings; counting all 15 as wrong, it would be 51% (29 of 57). On the development set the same comparison is 96% against 62% (25 of 40). On the recall set no finding matched an ambiguous label.
 4. **Order of work:**
    1. Label the development set.
    2. Run the original rules on it.

@@ -8,7 +8,7 @@
     "start": "forge tunnel",
     "test": "npm run test:domain && npm run test:resolvers",
     "test:domain": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/register.mjs src/domain/fixtures/checkFixtures.ts",
-    "test:resolvers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/register.mjs --test test/resolvers.test.ts test/graph.test.ts test/drift.test.ts test/drift-concurrency.test.ts test/graph-resolution.test.ts",
+    "test:resolvers": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/register.mjs --test test/resolvers.test.ts test/graph.test.ts test/drift.test.ts test/drift-concurrency.test.ts test/graph-resolution.test.ts test/judge-path.test.ts",
     "benchmark": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/register.mjs benchmark/run.ts"
   },
   "dependencies": {
