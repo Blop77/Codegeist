@@ -249,14 +249,15 @@ function DriftLine({ drift }) {
     // decision names one and the issue's current text contains it.
     return (
       <Stack space="space.025">
-        <Inline space="space.100" alignBlock="center">
+        {/* The labels get their own row: sharing it with the sentence squeezed them to "Old wor…" in the narrow issue panel. */}
+        <Inline space="space.100" alignBlock="center" shouldWrap>
           <Lozenge appearance="success">Old wording removed</Lozenge>
           {drift.replacementFound && <Lozenge appearance="success">Replacement wording found</Lozenge>}
-          <Text>
-            No longer mentions “{drift.phrase}” · {shortDate(drift.resolvedAt)}
-            {drift.resolvedBy === 'issue-update' ? ' · noticed when the issue was edited' : ' · found by a later scan'}
-          </Text>
         </Inline>
+        <Text>
+          No longer mentions “{drift.phrase}” · {shortDate(drift.resolvedAt)}
+          {drift.resolvedBy === 'issue-update' ? ' · noticed when the issue was edited' : ' · found by a later scan'}
+        </Text>
         {drift.replacement && (
           <Text>
             <Em>
