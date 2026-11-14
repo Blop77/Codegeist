@@ -106,7 +106,7 @@ The server builds the comment, and posts it only if it is still exactly the prev
 **7. Check the safeguards.**
 
 - Scan again: there is still one decision. The app's own comment is not read as a new decision, and `KEY-1` no longer offers to post the note.
-- Open `KEY-1`: the **Decision Drift Radar** panel on the issue shows the same decision, its review and the posted note.
+- Open `KEY-1`: the **Decision Drift Radar** panel on the issue shows the same decision, its review and the posted note. If the panel isn't shown, use the apps button below the issue title and choose **Decision Drift Radar**; Jira then keeps the panel on the issue.
 - Open the project and choose **Decision Drift Radar** in its sidebar (Jira labels it "Space navigation"): the app scans that project without asking for a key. On a new site the app may not be in the sidebar yet: use **Add to navigation**, then find it under **More**.
 
 **8. Verify the correction.** In Jira, replace the scheduling line you added to the issue with `Scheduling: this work follows one shared launch plan.` Save and scan again. `KEY-1` now shows **Replacement wording found**. Its reason says that the issue mentions “one shared launch plan” and no longer mentions “separate channel plans”. The existing comment remains available. Radar checks the wording on each scan. Deleting the old wording alone does not produce this status.
