@@ -19,7 +19,10 @@ export default {
 
 export const startsWith = (value) => ({ condition: 'STARTS_WITH', value });
 
-export const memory = new Map();
+// The app now stores everything through @forge/kvs, so the legacy storage stand-in shares its map:
+// tests that inspect `memory` see the same records the app writes.
+import { kvsMemory } from './kvs.mjs';
+export const memory = kvsMemory;
 globalThis.__memory = memory;
 
 export const storage = {

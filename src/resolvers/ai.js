@@ -6,7 +6,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { chat } from '@forge/llm';
-import { storage } from '@forge/api';
+import { kvs } from '@forge/kvs';
 import { Queue } from '@forge/events';
 import { MAX_QUOTE_LENGTH, sourceLines, verifyProposedFindings } from '../domain/extractDecisions';
 
@@ -108,14 +108,14 @@ async function claimRun(scopeKey) {
   const day = new Date(now).toISOString().slice(0, 10);
   const usageKey = `ai-usage:${day}`;
   const lastKey = `ai-last:${scopeKey}`;
-  const [used, last] = await Promise.all([storage.get(usageKey), storage.get(lastKey)]);
+  const [used, last] = await Promise.all([kvs.get(usageKey), kvs.get(lastKey)]);
   if ((used ?? 0) >= DAILY_RUNS_PER_SITE) {
     return `The AI pass has reached today's limit of ${DAILY_RUNS_PER_SITE} runs for this site. The rule-based findings above are unaffected.`;
   }
   if (last && now - last < COOLDOWN_SECONDS * 1000) {
     return `The AI pass ran for this scan moments ago. Try again in ${Math.ceil((COOLDOWN_SECONDS * 1000 - (now - last)) / 1000)} seconds.`;
   }
-  await Promise.all([storage.set(usageKey, (used ?? 0) + 1), storage.set(lastKey, now)]);
+  await Promise.all([kvs.set(usageKey, (used ?? 0) + 1), kvs.set(lastKey, now)]);
   return null;
 }
 
@@ -123,8 +123,8 @@ async function claimRun(scopeKey) {
 async function releaseRun(scopeKey) {
   try {
     const usageKey = `ai-usage:${new Date().toISOString().slice(0, 10)}`;
-    const used = (await storage.get(usageKey)) ?? 0;
-    await Promise.all([storage.set(usageKey, Math.max(0, used - 1)), storage.delete(`ai-last:${scopeKey}`)]);
+    const used = (await kvs.get(usageKey)) ?? 0;
+    await Promise.all([kvs.set(usageKey, Math.max(0, used - 1)), kvs.delete(`ai-last:${scopeKey}`)]);
   } catch (error) {
     console.warn('Decision Drift Radar could not release an AI run', errorLabel(error));
   }
@@ -141,7 +141,7 @@ function evidenceOnly({ sourceId, quote, kind }) {
 /** Adds newly verified proposals to the project's saved AI findings, newest first. */
 async function saveProposals(projectKey, saved) {
   if (saved.length === 0) return;
-  const stored = (await storage.get(savedKey(projectKey)))?.proposals ?? [];
+  const stored = (await kvs.get(savedKey(projectKey)))?.proposals ?? [];
   const seen = new Set();
   const merged = [...saved, ...stored].filter((p) => {
     const id = `${p.sourceId}\u0000${p.quote}`;
@@ -149,7 +149,7 @@ async function saveProposals(projectKey, saved) {
     seen.add(id);
     return true;
   }).slice(0, SAVED_LIMIT).map(evidenceOnly);
-  await storage.set(savedKey(projectKey), { savedAt: new Date().toISOString(), proposals: merged });
+  await kvs.set(savedKey(projectKey), { savedAt: new Date().toISOString(), proposals: merged });
 }
 
 /**
@@ -158,7 +158,7 @@ async function saveProposals(projectKey, saved) {
  */
 export async function savedAiCandidates({ projectKey, sources, issues, known }) {
   try {
-    const stored = await storage.get(savedKey(projectKey));
+    const stored = await kvs.get(savedKey(projectKey));
     if (!stored?.proposals?.length) return { candidates: [], savedAt: null };
     const { candidates } = verifyProposedFindings({ sources, issues }, stored.proposals.map(evidenceOnly), known);
     return { candidates: candidates.map((c) => ({ ...c, ai: true })), savedAt: stored.savedAt ?? null };
@@ -272,7 +272,7 @@ function passesQuoteRules(proposal, projectKey) {
  * the person just ran, so only text they can read is sent. One job per project runs at a time.
  */
 export async function startAiJob({ projectKey, sources, known }) {
-  const current = await storage.get(jobKey(projectKey));
+  const current = await kvs.get(jobKey(projectKey));
   if (stillRunning(current)) return { ok: true, pending: true, startedAt: current.startedAt };
   const limited = await claimRun(projectKey);
   if (limited) return { ok: false, error: limited };
@@ -283,7 +283,7 @@ export async function startAiJob({ projectKey, sources, known }) {
     return { ok: true, pending: false, candidates: [], newCount: 0, rejected: 0, model: AI_MODEL };
   }
   const job = { jobId: randomUUID(), state: 'running', startedAt: new Date().toISOString(), sourcesSent: numbered.sourcesSent };
-  await storage.set(jobKey(projectKey), job);
+  await kvs.set(jobKey(projectKey), job);
   try {
     await aiQueue.push({ body: {
       jobId: job.jobId,
@@ -293,7 +293,7 @@ export async function startAiJob({ projectKey, sources, known }) {
     } });
   } catch (error) {
     console.error('Decision Drift Radar could not start the AI pass', errorLabel(error));
-    await storage.set(jobKey(projectKey), { ...job, state: 'failed', finishedAt: new Date().toISOString(), error: 'The AI pass could not be started. Try again in a minute.' });
+    await kvs.set(jobKey(projectKey), { ...job, state: 'failed', finishedAt: new Date().toISOString(), error: 'The AI pass could not be started. Try again in a minute.' });
     await releaseRun(projectKey);
     return { ok: false, error: 'The AI pass could not be started. Try again in a minute. The rule-based findings above are unaffected.' };
   }
@@ -309,9 +309,9 @@ export async function startAiJob({ projectKey, sources, known }) {
 export async function runAiJob(event) {
   const { jobId, projectKey, text, ids } = event?.body ?? {};
   if (typeof jobId !== 'string' || !/^[A-Z][A-Z0-9_]{1,9}$/.test(String(projectKey)) || typeof text !== 'string' || !Array.isArray(ids)) return;
-  const job = await storage.get(jobKey(projectKey));
+  const job = await kvs.get(jobKey(projectKey));
   if (job?.jobId !== jobId || job.state !== 'running') return;
-  const finish = (fields) => storage.set(jobKey(projectKey), { ...job, ...fields, finishedAt: new Date().toISOString() });
+  const finish = (fields) => kvs.set(jobKey(projectKey), { ...job, ...fields, finishedAt: new Date().toISOString() });
 
   const answer = await callModel(text);
   if (!answer.ok) {
@@ -338,7 +338,7 @@ export async function runAiJob(event) {
 
 /** The project's AI job record: `none`, `running`, `failed` (with its message) or `done`. */
 export async function aiJobStatus(projectKey) {
-  const job = await storage.get(jobKey(projectKey));
+  const job = await kvs.get(jobKey(projectKey));
   if (!job) return { state: 'none' };
   if (job.state === 'running' && !stillRunning(job)) {
     return { state: 'failed', error: 'The AI pass took too long and was stopped. Try again.' };

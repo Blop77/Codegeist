@@ -4,8 +4,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { kvsMemory } from './mocks/kvs.mjs';
-import { storage } from './mocks/api.mjs';
+import { kvs, kvsMemory } from './mocks/kvs.mjs';
 import { mc9Description, mcIssues } from '../src/domain/fixtures/mcDemoInput.ts';
 
 const SITE = 'https://one-atlas-pxox.atlassian.net';
@@ -30,7 +29,7 @@ const pageText = [
 const INDIRECT = 'After the review, the team is going ahead with Tuesday-only sends for the email campaign.';
 const COMMENT_DECISION = 'Decided in standup: email sends use the shared launch plan instead of separate channel plans.';
 /** Sharing checks on Jira sources: security levels and comment visibility. */
-const restricted = { issueSecurity: false, commentVisibility: false };
+const restricted = { issueSecurity: false, commentVisibility: false, cannotComment: false };
 
 g.__confluence = (_path: string, json: any) => json({
   results: [{
@@ -56,6 +55,9 @@ const rawIssues = mcIssues.map((issue, n) => ({
 
 const comments: Array<{ issueKey: string; id: string; body: any; properties: any[] }> = [];
 g.__jira = (path: string, json: any, options: any) => {
+  if (path.startsWith('/rest/api/3/mypermissions')) {
+    return json({ permissions: { ADD_COMMENTS: { havePermission: !restricted.cannotComment } } });
+  }
   if (/\/project\/MC$/.test(path)) return json({ key: 'MC' });
   const commentPath = /\/rest\/api\/3\/issue\/([^/]+)\/comment(?:\?|$)/.exec(path);
   if (commentPath) {
@@ -343,6 +345,40 @@ test('a same-project Jira comment can be quoted, with the person\'s note, unless
 });
 
 
+test('reviewing needs permission to comment in the project, and records who reviewed only as a hash', async () => {
+  const radar = await handler.getProjectRadar({ payload: { projectKey: 'MC' }, context: ctx });
+  const finding = radar.candidates[0];
+  const payload = { projectKey: 'MC', candidateId: finding.id, choice: 'dismissed' };
+  const key = `review:MC:${finding.id}`;
+  const before = memory.get(key);
+  restricted.cannotComment = true;
+  try {
+    const refused = await handler.reviewDecision({ payload, context: ctx });
+    assert.equal(refused.ok, false);
+    assert.match(refused.error, /permission to add comments/);
+    assert.deepEqual(memory.get(key), before);
+    const cleared = await handler.clearDecisionReview({ payload, context: ctx });
+    assert.equal(cleared.ok, false);
+    assert.deepEqual(memory.get(key), before);
+  } finally {
+    restricted.cannotComment = false;
+  }
+  const saved = await handler.reviewDecision({ payload, context: ctx });
+  assert.equal(saved.ok, true, saved.error);
+  assert.equal(saved.review.reviewedBy, 'you');
+  assert.equal(saved.review.reviewer, undefined);
+  const stored = memory.get(key);
+  assert.match(stored.reviewer, /^[a-f0-9]{64}$/);
+  assert.ok(!JSON.stringify(stored).includes(ctx.accountId));
+  const mine = await handler.getProjectRadar({ payload: { projectKey: 'MC' }, context: ctx });
+  assert.equal(mine.candidates.find((c: any) => c.id === finding.id).review.reviewedBy, 'you');
+  const theirs = await handler.getProjectRadar({ payload: { projectKey: 'MC' }, context: { ...ctx, accountId: 'acc-2' } });
+  const seen = theirs.candidates.find((c: any) => c.id === finding.id).review;
+  assert.equal(seen.reviewedBy, 'teammate');
+  assert.equal(seen.reviewer, undefined);
+  if (before === undefined) memory.delete(key); else memory.set(key, before);
+});
+
 test('reviewing requires a currently visible finding', async () => {
   const payload = { projectKey: 'MC', candidateId: 'dc_0000000000000000', choice: 'relevant' };
   const refused = await handler.reviewDecision({ payload, context: ctx });
@@ -518,17 +554,17 @@ test('a missing receipt is recovered without a second Jira comment', async () =>
   await handler.reviewDecision({ payload: { projectKey: 'MC', candidateId: shared.findingId, choice: 'relevant' }, context: ctx });
   const { payload } = await previewed({ projectKey: 'MC', candidateId: shared.findingId, issueKey, note: 'Keep the shared plan.' });
   const receiptKey = `note:MC:${shared.findingId}:${issueKey}`;
-  const set = storage.set;
+  const set = kvs.set;
   try {
-    storage.set = async (key, value) => {
+    kvs.set = async (key: string, value: any, options?: any) => {
       if (key === receiptKey) throw new Error('Receipt write failed');
-      return set(key, value);
+      return set(key, value, options);
     };
     const first = await handler.applyDecisionNote({ payload, context: ctx });
     assert.equal(first.ok, true);
     assert.ok(first.warning);
   } finally {
-    storage.set = set;
+    kvs.set = set;
   }
   const retry = await handler.applyDecisionNote({ payload, context: ctx });
   assert.equal(retry.ok, true);

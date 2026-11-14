@@ -31,13 +31,15 @@ const qIssues = [
 
 const calls: string[] = [];
 let projectSearchStatus = 200;
+let moreIssuesExist = false;
 g.__jira = (path: string, json: any) => {
   calls.push(path);
+  if (path.startsWith('/rest/api/3/mypermissions')) return json({ permissions: { ADD_COMMENTS: { havePermission: true } } });
   if (path.startsWith('/rest/api/3/search/jql')) {
     if (decodeURIComponent(path).includes('"EMPTY"')) return json({ issues: [] });
     if (decodeURIComponent(path).includes('"MARKETING"')) return json({ errorMessages: ['bad project'] }, 400);
     if (decodeURIComponent(path).includes('"BUSY"')) return json({}, 429);
-    return json({ issues: qIssues }, projectSearchStatus);
+    return json({ issues: qIssues, ...(moreIssuesExist ? { isLast: false, nextPageToken: 'next' } : { isLast: true }) }, projectSearchStatus);
   }
   if (/\/rest\/api\/3\/project\/QA$/.test(path)) return json({ id: '40001', key: 'QA' });
   if (/\/rest\/api\/3\/project\/EMPTY$/.test(path)) return json({ id: '40002', key: 'EMPTY' });
@@ -111,6 +113,21 @@ test('a decision recorded on another issue shows in the panel and is reviewed wi
   assert.equal(review.ok, true);
   assert.equal(calls.filter((p) => p.startsWith('/rest/api/3/search/jql')).length, 1, 'one issue search, not a second full scan');
   assert.equal(calls.filter((p) => p.startsWith('/wiki/rest/api/content/search')).length, 1);
+});
+
+test('a scan says when older issues were not checked', async () => {
+  const full = await handler.getProjectRadar({ payload: { projectKey: 'QA' }, context: ctx });
+  assert.equal(full.ok, true, full.error);
+  assert.equal(full.coverage.moreIssues, false);
+  moreIssuesExist = true;
+  try {
+    const partial = await handler.getProjectRadar({ payload: { projectKey: 'QA' }, context: ctx });
+    assert.equal(partial.ok, true, partial.error);
+    assert.equal(partial.coverage.moreIssues, true);
+    assert.equal(partial.coverage.pageLimit, 20);
+  } finally {
+    moreIssuesExist = false;
+  }
 });
 
 test('an empty project still reads its id, so Teamwork Graph is queried', async () => {

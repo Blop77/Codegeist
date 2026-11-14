@@ -227,6 +227,8 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onPreviewNote, 
 /** How strongly an issue is tied to the finding, in words, from the matcher's score. */
 export function matchStrength(affected) {
   if (affected.wordingStatus === 'outdated') return 'Strong match: still uses the replaced wording';
+  // A corrected issue can still share terms with the decision; it is no longer an active match.
+  if (affected.drift?.status === 'resolved') return 'Corrected since it was found';
   if (affected.relevance >= 0.75) return 'Strong match';
   if (affected.relevance >= 0.45) return 'Possible match';
   return 'Weak match';
@@ -273,7 +275,7 @@ function DriftLine({ drift }) {
   return <Text><Em>Drifting since {shortDate(drift.firstSeenAt)}: the issue still says “{drift.phrase}”.</Em></Text>;
 }
 
-export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false, onApplyNote, onPreviewNote, onDraftNote, sample = false }) {
+export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false, onApplyNote, onPreviewNote, onDraftNote, sample = false, followUpHere = null }) {
   const kind = KIND_LABEL[candidate.kind] ?? KIND_LABEL.proposal;
   const { source } = candidate;
   const sourceHref = siteLink(siteUrl, source.url);
@@ -293,6 +295,11 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
         {candidate.isNew && <Lozenge appearance="inprogress">New since your last visit</Lozenge>}
         <Text>{sourceHref ? <Link href={sourceHref}>{source.title || 'Source'}</Link> : source.title}</Text>
       </Inline>
+      {followUpHere && (
+        <SectionMessage appearance="information" title="The follow-up on this issue is about this decision">
+          A Decision Drift Radar follow-up for this decision was posted on this issue{followUpHere.appliedAt ? ` on ${shortDate(followUpHere.appliedAt)}` : ''}. Its source and the reason are below.
+        </SectionMessage>
+      )}
       <Text><Strong>{candidate.summary}</Strong></Text>
       <Text><Em>“{candidate.evidence.quote}”</Em></Text>
       <Text>{sourceMeta(source)}</Text>
@@ -310,7 +317,7 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
             <Lozenge appearance={review.status === 'relevant' ? 'success' : 'removed'}>
               {review.status === 'relevant' ? 'Marked relevant' : 'Dismissed'}
             </Lozenge>
-            <Text>{sample ? 'Sample only: not saved' : `Reviewed ${review.reviewedAt ? new Date(review.reviewedAt).toLocaleDateString() : ''}`}</Text>
+            <Text>{sample ? 'Sample only: not saved' : `Reviewed${review.reviewedBy === 'you' ? ' by you' : review.reviewedBy === 'teammate' ? ' by a teammate' : ''} ${review.reviewedAt ? new Date(review.reviewedAt).toLocaleDateString() : ''}`}</Text>
           </Inline>
         ) : <Text>{sample ? 'Sample: try the review a teammate would do. Nothing is saved.' : 'Needs teammate review'}</Text>}
         {reviewWith && (
@@ -350,7 +357,9 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
                 {affected.wordingStatus === 'replacement-found' && <Lozenge appearance="success">Replacement wording found</Lozenge>}
               </Inline>
               {affected.reasons.map((reason) => <Text key={reason}>• {reason}</Text>)}
-              <Text><Em>Match score {affected.relevance.toFixed(2)}: a signal strength from these reasons, not a probability.</Em></Text>
+              {affected.drift?.status !== 'resolved' && (
+                <Text><Em>Match score {affected.relevance.toFixed(2)}: a signal strength from these reasons, not a probability.</Em></Text>
+              )}
               <DriftLine drift={affected.drift} />
               {(canNote || candidate.notes?.[affected.issueKey]) && (
                 <NoteAction
