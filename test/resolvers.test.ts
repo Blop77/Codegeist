@@ -30,6 +30,7 @@ const INDIRECT = 'After the review, the team is going ahead with Tuesday-only se
 const COMMENT_DECISION = 'Decided in standup: email sends use the shared launch plan instead of separate channel plans.';
 /** Sharing checks on Jira sources: security levels and comment visibility. */
 const restricted = { issueSecurity: false, commentVisibility: false, cannotComment: false };
+let lastPermissionPath = '';
 
 g.__confluence = (_path: string, json: any) => json({
   results: [{
@@ -56,7 +57,12 @@ const rawIssues = mcIssues.map((issue, n) => ({
 const comments: Array<{ issueKey: string; id: string; body: any; properties: any[] }> = [];
 g.__jira = (path: string, json: any, options: any) => {
   if (path.startsWith('/rest/api/3/mypermissions')) {
-    return json({ permissions: { ADD_COMMENTS: { havePermission: !restricted.cannotComment } } });
+    lastPermissionPath = path;
+    return json({ permissions: {
+      BROWSE_PROJECTS: { havePermission: true },
+      ADD_COMMENTS: { havePermission: !restricted.cannotComment },
+      EDIT_ISSUES: { havePermission: false }
+    } });
   }
   if (/\/project\/MC$/.test(path)) return json({ key: 'MC' });
   const commentPath = /\/rest\/api\/3\/issue\/([^/]+)\/comment(?:\?|$)/.exec(path);
@@ -356,6 +362,7 @@ test('reviewing needs permission to comment in the project, and records who revi
     const refused = await handler.reviewDecision({ payload, context: ctx });
     assert.equal(refused.ok, false);
     assert.match(refused.error, /permission to add comments/);
+    assert.match(lastPermissionPath, /projectKey=MC&permissions=BROWSE_PROJECTS%2CADD_COMMENTS%2CEDIT_ISSUES/);
     assert.deepEqual(memory.get(key), before);
     const cleared = await handler.clearDecisionReview({ payload, context: ctx });
     assert.equal(cleared.ok, false);
@@ -429,6 +436,17 @@ test('Rovo prepares a private draft and Jira posts the exact preview only for it
   assert.equal((await postDraft(issueKey, draft, stranger)).ok, false);
   assert.equal((await postDraft('MC-8', draft)).ok, false);
   assert.equal((await postDraft(issueKey, { ...draft, digest: 'other' })).ok, false, 'only the previewed comment can be posted');
+
+  restricted.cannotComment = true;
+  try {
+    const blocked = await postDraft(issueKey, draft);
+    assert.equal(blocked.ok, false);
+    assert.match(blocked.error, /permission to add comments or edit issues/);
+    assert.match(lastPermissionPath, /issueKey=MC-9/, 'the permission is checked on the issue itself');
+    assert.equal(comments.filter((entry) => entry.issueKey === issueKey).length, before);
+  } finally {
+    restricted.cannotComment = false;
+  }
 
   const posted = await postDraft(issueKey, draft);
   assert.equal(posted.ok, true, posted.error);

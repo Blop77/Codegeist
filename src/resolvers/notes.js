@@ -41,17 +41,23 @@ export async function canAccessProject(projectKey) {
   return response.ok;
 }
 
+export const NO_REVIEW_PERMISSION = 'Reviews apply to everyone in this project, so they need permission to add comments or edit issues here. Ask a project admin, or a teammate who can comment, to review it.';
+
 /**
- * Reviews change what the whole project sees, so they need more than read access: the person
- * must be able to add comments in the project, the same permission a follow-up needs.
+ * Reviews change what the whole project sees, so they need more than read access: the person must
+ * be able to browse and either comment on or edit issues. Checked on the issue when one is named
+ * (issue security can narrow the project's permissions), otherwise on the project.
  */
-export async function canChangeReviews(projectKey) {
-  const response = await api.asUser().requestJira(
-    route`/rest/api/3/mypermissions?projectKey=${projectKey}&permissions=ADD_COMMENTS`
-  );
+export async function canChangeReviews(projectKey, issueKey = null) {
+  const permissions = 'BROWSE_PROJECTS,ADD_COMMENTS,EDIT_ISSUES';
+  const path = issueKey
+    ? route`/rest/api/3/mypermissions?issueKey=${issueKey}&permissions=${permissions}`
+    : route`/rest/api/3/mypermissions?projectKey=${projectKey}&permissions=${permissions}`;
+  const response = await api.asUser().requestJira(path);
   if (!response.ok) return false;
-  const body = await response.json();
-  return body?.permissions?.ADD_COMMENTS?.havePermission === true;
+  const granted = (await response.json())?.permissions;
+  return granted?.BROWSE_PROJECTS?.havePermission === true
+    && (granted?.ADD_COMMENTS?.havePermission === true || granted?.EDIT_ISSUES?.havePermission === true);
 }
 
 /** Who reviewed, kept only as a hash so storage never holds an account id. */

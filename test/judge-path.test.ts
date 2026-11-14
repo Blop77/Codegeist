@@ -34,7 +34,9 @@ let projectSearchStatus = 200;
 let moreIssuesExist = false;
 g.__jira = (path: string, json: any) => {
   calls.push(path);
-  if (path.startsWith('/rest/api/3/mypermissions')) return json({ permissions: { ADD_COMMENTS: { havePermission: true } } });
+  if (path.startsWith('/rest/api/3/mypermissions')) {
+    return json({ permissions: { BROWSE_PROJECTS: { havePermission: true }, ADD_COMMENTS: { havePermission: true }, EDIT_ISSUES: { havePermission: true } } });
+  }
   if (path.startsWith('/rest/api/3/search/jql')) {
     if (decodeURIComponent(path).includes('"EMPTY"')) return json({ issues: [] });
     if (decodeURIComponent(path).includes('"MARKETING"')) return json({ errorMessages: ['bad project'] }, 400);

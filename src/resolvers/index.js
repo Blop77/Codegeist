@@ -8,7 +8,7 @@ import { aiJobStatus, draftNoteWithAi, findWithAi, startAiJob } from './ai';
 import { confirmRovoDraft, loadRovoDraft } from './rovo-drafts';
 import { lastVisit, saveVisit, trackScan } from './drift';
 import {
-  attachReviewState, canAccessProject, canChangeReviews, composeNote, defaultNoteText, MAX_NOTE_LENGTH, noteProblem, postNote, presentReview,
+  attachReviewState, canAccessProject, canChangeReviews, composeNote, NO_REVIEW_PERMISSION, defaultNoteText, MAX_NOTE_LENGTH, noteProblem, postNote, presentReview,
   reviewerHash, reviewKey, sourceSharing,
   validReviewTarget
 } from './notes';
@@ -20,7 +20,6 @@ const resolver = new Resolver();
 const REVIEW_CHOICES = new Set(['relevant', 'dismissed']);
 
 const NO_PROJECT_ACCESS = 'You do not have access to this Jira project, so you cannot review its findings.';
-const NO_REVIEW_PERMISSION = 'Reviews apply to everyone in this project, so they need permission to add comments here. Ask a project admin, or a teammate who can comment, to review it.';
 
 const pageList = (pages) => pages.map(({ id, title, url, via }) => ({ id, title, url, ...(via ? { via } : {}) }));
 
@@ -95,8 +94,9 @@ resolver.define('getIssueDecisionContext', async ({ payload, context }) => {
 
 async function canReviewFinding({ projectKey, candidateId, issueKey, cloudId }) {
   if (!(await canAccessProject(projectKey))) return { ok: false, error: NO_PROJECT_ACCESS };
-  if (!(await canChangeReviews(projectKey))) return { ok: false, error: NO_REVIEW_PERMISSION };
-  if (issueKey && new RegExp(`^${projectKey}-\\d+$`).test(issueKey)) {
+  const onIssue = Boolean(issueKey) && new RegExp(`^${projectKey}-\\d+$`).test(issueKey);
+  if (!(await canChangeReviews(projectKey, onIssue ? issueKey : null))) return { ok: false, error: NO_REVIEW_PERMISSION };
+  if (onIssue) {
     return resolveFindingForIssue({ projectKey, candidateId, issueKey, cloudId });
   }
   const project = await scanProject(projectKey, { cloudId });

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { kvs } from '@forge/kvs';
 import { resolveFindingForIssue } from './scan';
-import { composeNote, defaultNoteText, noteKey, noteProblem, postNote, reviewerHash, reviewKey } from './notes';
+import { canChangeReviews, composeNote, defaultNoteText, NO_REVIEW_PERMISSION, noteKey, noteProblem, postNote, reviewerHash, reviewKey } from './notes';
 
 const DRAFT_MINUTES = 10;
 const draftKey = (accountId, issueKey) =>
@@ -95,6 +95,8 @@ export async function confirmRovoDraft(input, id, digest) {
   if (!digest || digest !== current.composed.digest) {
     return { ok: false, error: 'The comment changed since you loaded the preview, so nothing was posted. Load the draft again.' };
   }
+  // Posting a draft also records a relevant review, which everyone in the project sees.
+  if (!(await canChangeReviews(draft.projectKey, issueKey))) return { ok: false, error: NO_REVIEW_PERMISSION };
   const posted = await postNote({ ...draft, body: current.composed.body, confirmedIn: 'rovo' });
   if (!posted.ok) return posted;
 

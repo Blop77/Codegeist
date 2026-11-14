@@ -295,11 +295,19 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
         {candidate.isNew && <Lozenge appearance="inprogress">New since your last visit</Lozenge>}
         <Text>{sourceHref ? <Link href={sourceHref}>{source.title || 'Source'}</Link> : source.title}</Text>
       </Inline>
-      {followUpHere && (
-        <SectionMessage appearance="information" title="The follow-up on this issue is about this decision">
-          A Decision Drift Radar follow-up for this decision was posted on this issue{followUpHere.appliedAt ? ` on ${shortDate(followUpHere.appliedAt)}` : ''}. Its source and the reason are below.
-        </SectionMessage>
-      )}
+      {followUpHere && (() => {
+        const commentHref = followUpHere.commentId && followUpHere.issueKey
+          ? siteLink(siteUrl, `/browse/${followUpHere.issueKey}?focusedCommentId=${followUpHere.commentId}`)
+          : null;
+        return (
+          <SectionMessage appearance="information" title="The follow-up on this issue is about this decision">
+            <Text>
+              A Decision Drift Radar follow-up for this decision was posted on this issue{followUpHere.appliedAt ? ` on ${shortDate(followUpHere.appliedAt)}` : ''}. Its source and the reason are below.
+              {commentHref ? <>{' '}<Link href={commentHref}>View comment</Link></> : null}
+            </Text>
+          </SectionMessage>
+        );
+      })()}
       <Text><Strong>{candidate.summary}</Strong></Text>
       <Text><Em>“{candidate.evidence.quote}”</Em></Text>
       <Text>{sourceMeta(source)}</Text>
