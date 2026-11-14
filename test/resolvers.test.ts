@@ -54,8 +54,15 @@ const rawIssues = mcIssues.map((issue, n) => ({
   }
 }));
 
+let jiraReviewPermissions = { BROWSE_PROJECTS: true, ADD_COMMENTS: true, EDIT_ISSUES: false };
+const permissionQueries: URLSearchParams[] = [];
 const comments: Array<{ issueKey: string; id: string; body: any; properties: any[] }> = [];
 g.__jira = (path: string, json: any, options: any) => {
+  if (path.startsWith('/rest/api/3/mypermissions?')) {
+    permissionQueries.push(new URLSearchParams(path.split('?')[1]));
+    return json({ permissions: Object.fromEntries(Object.entries(jiraReviewPermissions)
+      .map(([key, havePermission]) => [key, { havePermission }])) });
+  }
   if (/\/project\/MC$/.test(path)) return json({ key: 'MC' });
   const commentPath = /\/rest\/api\/3\/issue\/([^/]+)\/comment(?:\?|$)/.exec(path);
   if (commentPath) {
@@ -350,6 +357,52 @@ test('reviewing requires a currently visible finding', async () => {
   assert.equal(memory.has(`review:MC:${payload.candidateId}`), false);
 });
 
+test('shared reviews reject browse-only access and expose only viewer-relative attribution', async () => {
+  const issueKey = 'MC-9';
+  const projectKey = 'MC';
+  const panel = await handler.getIssueDecisionContext({ payload: { issueKey }, context: ctx });
+  const candidate = panel.candidates.find((item: any) => item.summary.includes('shared launch plan'));
+  assert.ok(candidate);
+  const candidateId = candidate.id;
+  const key = `review:MC:${candidateId}`;
+  const prior = memory.get(key);
+  const permissions = jiraReviewPermissions;
+  const legacy = { status: 'relevant', reviewedAt: '2026-11-12T10:00:00Z' };
+  memory.set(key, legacy);
+  try {
+    jiraReviewPermissions = { BROWSE_PROJECTS: true, ADD_COMMENTS: false, EDIT_ISSUES: false };
+    const payload = { projectKey, candidateId, issueKey };
+    for (const choice of ['relevant', 'dismissed']) {
+      const response = await handler.reviewDecision({ payload: { ...payload, choice }, context: ctx });
+      assert.equal(response.ok, false);
+      assert.match(response.error, /permission to add comments or edit issues/);
+      assert.equal(permissionQueries.at(-1)?.get('issueKey'), issueKey);
+      assert.equal(permissionQueries.at(-1)?.has('projectKey'), false);
+    }
+    assert.equal((await handler.clearDecisionReview({ payload: { projectKey, candidateId }, context: ctx })).ok, false);
+    assert.equal(permissionQueries.at(-1)?.get('projectKey'), projectKey);
+    assert.deepEqual(memory.get(key), legacy);
+
+    jiraReviewPermissions = { BROWSE_PROJECTS: true, ADD_COMMENTS: false, EDIT_ISSUES: true };
+    const legacyPanel = await handler.getIssueDecisionContext({ payload: { issueKey }, context: ctx });
+    assert.deepEqual(legacyPanel.candidates.find((item: any) => item.id === candidateId).review, legacy);
+    const saved = await handler.reviewDecision({ payload: { ...payload, choice: 'relevant' }, context: ctx });
+    assert.equal(saved.ok, true, saved.error);
+    assert.equal(saved.review.reviewer, 'you');
+    assert.equal(saved.review.reviewerHash, undefined);
+    const otherPanel = await handler.getIssueDecisionContext({ payload: { issueKey }, context: { ...ctx, accountId: 'another-reviewer' } });
+    const seen = otherPanel.candidates.find((item: any) => item.id === candidateId).review;
+    assert.equal(seen.reviewer, 'a teammate');
+    assert.equal(seen.reviewerHash, undefined);
+    assert.equal((await handler.clearDecisionReview({ payload, context: ctx })).ok, true);
+    assert.equal(memory.has(key), false);
+  } finally {
+    jiraReviewPermissions = permissions;
+    if (prior === undefined) memory.delete(key);
+    else memory.set(key, prior);
+  }
+});
+
 test('Rovo: findings carry ids, review state and how they were found', async () => {
   const found = await actions.findIssueDecisions(rovo({ issueKey: 'MC-9' }));
   assert.equal(found.ok, true);
@@ -393,6 +446,17 @@ test('Rovo prepares a private draft and Jira posts the exact preview only for it
   assert.equal((await postDraft(issueKey, draft, stranger)).ok, false);
   assert.equal((await postDraft('MC-8', draft)).ok, false);
   assert.equal((await postDraft(issueKey, { ...draft, digest: 'other' })).ok, false, 'only the previewed comment can be posted');
+
+  const permissions = jiraReviewPermissions;
+  try {
+    jiraReviewPermissions = { BROWSE_PROJECTS: true, ADD_COMMENTS: false, EDIT_ISSUES: false };
+    const refused = await postDraft(issueKey, draft);
+    assert.equal(refused.ok, false);
+    assert.match(refused.error, /permission to add comments or edit issues/);
+    assert.equal(comments.filter((entry) => entry.issueKey === issueKey).length, before);
+  } finally {
+    jiraReviewPermissions = permissions;
+  }
 
   const posted = await postDraft(issueKey, draft);
   assert.equal(posted.ok, true, posted.error);

@@ -30,7 +30,7 @@ When a person selects **Draft with AI** on a note, the app sends that finding (i
 
 The app stores a small amount of data in Forge storage for your site:
 
-- For each finding a teammate reviews: the review status ("relevant" or "dismissed") and the time of the review.
+- For each finding a teammate reviews: the review status ("relevant" or "dismissed"), the time of the review, and a project-scoped hash of the reviewer’s account ID. The app uses the hash on the server to display whether you or a teammate reviewed the finding. It does not return the hash to viewers.
 - For each note posted to Jira: the issue key, the comment's id and the time it was posted.
 - For the AI pass: a count of runs per day for the site, and the time of the last run per project and per drafted note (keyed by issue key and finding id), used to limit usage. A run that fails before the model gives a usable answer is not counted.
 - For each project's latest AI pass: a job record with its state, start and finish times, counts, and the generated ids of the findings it added. It contains no page or issue text.
@@ -54,7 +54,7 @@ The "Try with sample data" scan uses fictional data bundled with the app. The ba
 
 ## Removing data
 
-A reviewer can clear a review with **Undo review**. Uninstalling the app removes its access to your site. Atlassian deletes an app's Forge storage for a site after the app is uninstalled, as described in Atlassian's Forge documentation. Comments the app posted remain in Jira and can be deleted there by anyone with permission.
+A person with Jira permission to add comments or edit issues can clear a shared review with **Undo review**. The same permission is required to mark a finding relevant, dismiss it, or confirm a Rovo draft that can create a shared review. Uninstalling the app removes its access to your site. Atlassian deletes an app's Forge storage for a site after the app is uninstalled, as described in Atlassian's Forge documentation. Comments the app posted remain in Jira and can be deleted there by anyone with permission.
 
 ## Changes and contact
 

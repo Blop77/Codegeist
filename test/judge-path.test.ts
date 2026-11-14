@@ -33,6 +33,9 @@ const calls: string[] = [];
 let projectSearchStatus = 200;
 g.__jira = (path: string, json: any) => {
   calls.push(path);
+  if (path.startsWith('/rest/api/3/mypermissions?')) return json({
+    permissions: { BROWSE_PROJECTS: { havePermission: true }, ADD_COMMENTS: { havePermission: true } }
+  });
   if (path.startsWith('/rest/api/3/search/jql')) {
     if (decodeURIComponent(path).includes('"EMPTY"')) return json({ issues: [] });
     if (decodeURIComponent(path).includes('"MARKETING"')) return json({ errorMessages: ['bad project'] }, 400);
@@ -97,6 +100,27 @@ test('the issue panel weighs words across the project, so it agrees with the pro
   assert.deepEqual(panel.candidates.filter((c: any) => c.summary.includes('SMS')), [], 'the panel does not report what the project scan does not');
   const again = await handler.getProjectRadar({ payload: { projectKey: 'QA' }, context: ctx });
   assert.equal(again.radar.drifting, project.radar.drifting, 'opening the panel recorded no extra drift');
+});
+
+test('project scan reports additional search pages without fetching them', async () => {
+  const jira = g.__jira;
+  const confluence = g.__confluence;
+  g.__jira = (path: string, json: any) => path.startsWith('/rest/api/3/search/jql')
+    ? json({ issues: qIssues, nextPageToken: 'next-jira-page', isLast: false })
+    : jira(path, json);
+  g.__confluence = (path: string, json: any) => path.includes('text~') || decodeURIComponent(path).includes('text ~')
+    ? json({ results: [], _links: { next: '/wiki/rest/api/content/search?cursor=next' } })
+    : confluence(path, json);
+  try {
+    const result = await handler.getProjectRadar({ payload: { projectKey: 'QA' }, context: ctx });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.coverage, { moreIssues: true, moreKeyPages: true });
+    assert.equal(result.issues.length, qIssues.length);
+    assert.equal(JSON.stringify(result).includes('next-jira-page'), false);
+  } finally {
+    g.__jira = jira;
+    g.__confluence = confluence;
+  }
 });
 
 test('a decision recorded on another issue shows in the panel and is reviewed without a second project scan', async () => {

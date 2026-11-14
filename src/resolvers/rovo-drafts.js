@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { storage } from '@forge/api';
 import { kvs } from '@forge/kvs';
 import { resolveFindingForIssue } from './scan';
-import { composeNote, defaultNoteText, noteKey, noteProblem, postNote, reviewKey } from './notes';
+import { canChangeSharedReview, composeNote, defaultNoteText, newReview, noteKey, noteProblem, postNote, REVIEW_PERMISSION_ERROR, reviewKey } from './notes';
 
 const DRAFT_MINUTES = 10;
 const draftKey = (accountId, issueKey) =>
@@ -96,6 +96,7 @@ export async function confirmRovoDraft(input, id, digest) {
   if (!digest || digest !== current.composed.digest) {
     return { ok: false, error: 'The comment changed since you loaded the preview, so nothing was posted. Load the draft again.' };
   }
+  if (!(await canChangeSharedReview(draft.projectKey, issueKey))) return { ok: false, error: REVIEW_PERMISSION_ERROR };
   const posted = await postNote({ ...draft, body: current.composed.body, confirmedIn: 'rovo' });
   if (!posted.ok) return posted;
 
@@ -103,7 +104,7 @@ export async function confirmRovoDraft(input, id, digest) {
   const review = reviewKey(draft.projectKey, draft.candidateId);
   try {
     if (!(await storage.get(review))) {
-      await storage.set(review, { status: 'relevant', reviewedAt: new Date().toISOString(), via: 'rovo' });
+      await storage.set(review, newReview(draft.projectKey, accountId, 'relevant', 'rovo'));
     }
   } catch {
     warning ??= 'The comment was posted, but the review record could not be updated.';

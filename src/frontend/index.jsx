@@ -253,6 +253,12 @@ function App() {
             Scanned {result.issues.length} {result.sample ? 'sample' : `recent ${result.projectKey}`} issues and {result.pages?.length ?? 0}
             {result.sample ? ' sample' : ''} Confluence{result.pages?.length === 1 ? ' page' : ' pages'}.
           </Text>
+          {(result.coverage?.moreIssues || result.coverage?.moreKeyPages) && (
+            <Text>
+              {result.coverage.moreIssues && 'More Jira issues are available beyond the recent scan. '}
+              {result.coverage.moreKeyPages && 'More Confluence pages match the project key beyond this scan.'}
+            </Text>
+          )}
           {result.radar && (
             <SectionMessage appearance="information" title="Radar">
               {`${result.radar.findings} ${result.radar.findings === 1 ? 'finding' : 'findings'}`}

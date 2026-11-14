@@ -35,10 +35,40 @@ export function validReviewTarget(projectKey, candidateId) {
   return /^[A-Z][A-Z0-9_]{1,9}$/.test(projectKey) && /^dc_[a-f0-9]{16}$/.test(candidateId);
 }
 
-/** Review state is per project, so only people who can see the project may change it. */
-export async function canAccessProject(projectKey) {
-  const response = await api.asUser().requestJira(route`/rest/api/3/project/${projectKey}`);
-  return response.ok;
+export const REVIEW_PERMISSION_ERROR = 'You need permission to add comments or edit issues in Jira to change shared reviews.';
+
+export async function canChangeSharedReview(projectKey, issueKey) {
+  const permissions = 'BROWSE_PROJECTS,ADD_COMMENTS,EDIT_ISSUES';
+  const path = issueKey
+    ? route`/rest/api/3/mypermissions?issueKey=${issueKey}&permissions=${permissions}`
+    : route`/rest/api/3/mypermissions?projectKey=${projectKey}&permissions=${permissions}`;
+  const response = await api.asUser().requestJira(path);
+  if (!response.ok) return false;
+  const granted = (await response.json())?.permissions;
+  return granted?.BROWSE_PROJECTS?.havePermission === true
+    && (granted?.ADD_COMMENTS?.havePermission === true || granted?.EDIT_ISSUES?.havePermission === true);
+}
+
+const reviewerHash = (projectKey, accountId) => createHash('sha256')
+  .update(JSON.stringify([projectKey, accountId])).digest('hex');
+
+export function newReview(projectKey, accountId, status, via) {
+  return {
+    status, reviewedAt: new Date().toISOString(), reviewerHash: reviewerHash(projectKey, accountId),
+    ...(via ? { via } : {})
+  };
+}
+
+/** Expose a viewer-relative label while keeping the stored identifier private. */
+export function reviewForViewer(review, projectKey, accountId) {
+  if (!review) return null;
+  return {
+    status: review.status, reviewedAt: review.reviewedAt,
+    ...(review.via ? { via: review.via } : {}),
+    ...(review.reviewerHash && accountId
+      ? { reviewer: review.reviewerHash === reviewerHash(projectKey, accountId) ? 'you' : 'a teammate' }
+      : {})
+  };
 }
 
 /** A link on this site to a Confluence page or Jira issue; anything else is dropped. */
@@ -343,7 +373,7 @@ function visibleNotes(candidate, notes) {
 }
 
 /** Adds each finding's saved review and the notes already posted to Jira for it. */
-export async function attachReviewState(projectKey, candidates) {
+export async function attachReviewState(projectKey, candidates, accountId) {
   if (candidates.length === 0) return { candidates, reviewWarning: null };
   try {
     const [reviews, notes] = await Promise.all([loadByPrefix(reviewPrefix(projectKey)), loadByPrefix(notePrefix(projectKey))]);
@@ -359,7 +389,7 @@ export async function attachReviewState(projectKey, candidates) {
     return {
       candidates: candidates.map((candidate) => ({
         ...candidate,
-        review: reviews.entries.get(candidate.id) ?? null,
+        review: reviewForViewer(reviews.entries.get(candidate.id), projectKey, accountId),
         notes: visibleNotes(candidate, notesByCandidate.get(candidate.id))
       })),
       reviewWarning: complete ? null : 'Some older reviews could not be loaded for this project.'

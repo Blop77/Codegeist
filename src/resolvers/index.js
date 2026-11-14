@@ -7,7 +7,8 @@ import { aiJobStatus, draftNoteWithAi, findWithAi, startAiJob } from './ai';
 import { confirmRovoDraft, loadRovoDraft } from './rovo-drafts';
 import { lastVisit, saveVisit, trackScan } from './drift';
 import {
-  attachReviewState, canAccessProject, composeNote, defaultNoteText, MAX_NOTE_LENGTH, noteProblem, postNote, reviewKey, sourceSharing,
+  attachReviewState, canChangeSharedReview, composeNote, defaultNoteText, MAX_NOTE_LENGTH, newReview, noteProblem,
+  postNote, REVIEW_PERMISSION_ERROR, reviewForViewer, reviewKey, sourceSharing,
   validReviewTarget
 } from './notes';
 import { GENERIC_NOTE, noteComment } from './normalize';
@@ -16,8 +17,6 @@ import { createHash } from 'node:crypto';
 const resolver = new Resolver();
 
 const REVIEW_CHOICES = new Set(['relevant', 'dismissed']);
-
-const NO_PROJECT_ACCESS = 'You do not have access to this Jira project, so you cannot review its findings.';
 
 const pageList = (pages) => pages.map(({ id, title, url, via }) => ({ id, title, url, ...(via ? { via } : {}) }));
 
@@ -31,7 +30,7 @@ resolver.define('getProjectRadar', async ({ payload, context }) => {
     const scanned = await scanProject(projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
     const { rawIssues, pages, warnings, candidates: extractedCandidates, notice, graph } = scanned;
-    const { candidates: reviewed, reviewWarning } = await attachReviewState(projectKey, [...extractedCandidates, ...scanned.aiCandidates]);
+    const { candidates: reviewed, reviewWarning } = await attachReviewState(projectKey, [...extractedCandidates, ...scanned.aiCandidates], context?.accountId);
     const previousVisitAt = await lastVisit(context?.accountId, projectKey);
     const tracked = await trackScan(projectKey, {
       candidates: reviewed,
@@ -48,6 +47,7 @@ resolver.define('getProjectRadar', async ({ payload, context }) => {
       ok: true,
       projectKey,
       issues: rawIssues.map(toIssueSummary),
+      coverage: scanned.coverage,
       pages: pageList(pages),
       candidates,
       notice,
@@ -76,7 +76,7 @@ resolver.define('getIssueDecisionContext', async ({ payload, context }) => {
     const scanned = await scanIssue(issueKey, projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
     const { warnings, candidates: forIssue, notice, graph } = scanned;
-    const { candidates: reviewed, reviewWarning } = await attachReviewState(projectKey, [...forIssue, ...scanned.aiCandidates]);
+    const { candidates: reviewed, reviewWarning } = await attachReviewState(projectKey, [...forIssue, ...scanned.aiCandidates], context?.accountId);
     const tracked = await trackScan(projectKey, { candidates: reviewed, issueRecords: scanned.issueRecords, observedAt: scanned.readAt });
 
     return {
@@ -90,10 +90,11 @@ resolver.define('getIssueDecisionContext', async ({ payload, context }) => {
 });
 
 async function canReviewFinding({ projectKey, candidateId, issueKey, cloudId }) {
-  if (!(await canAccessProject(projectKey))) return { ok: false, error: NO_PROJECT_ACCESS };
-  if (issueKey && new RegExp(`^${projectKey}-\\d+$`).test(issueKey)) {
-    return resolveFindingForIssue({ projectKey, candidateId, issueKey, cloudId });
+  if (issueKey != null && (typeof issueKey !== 'string' || !new RegExp(`^${projectKey}-\\d+$`).test(issueKey))) {
+    return { ok: false, error: 'This review action is invalid. Refresh the issue panel and try again.' };
   }
+  if (!(await canChangeSharedReview(projectKey, issueKey))) return { ok: false, error: REVIEW_PERMISSION_ERROR };
+  if (issueKey) return resolveFindingForIssue({ projectKey, candidateId, issueKey, cloudId });
   const project = await scanProject(projectKey, { cloudId });
   if (!project.ok) return project;
   return [...project.candidates, ...project.aiCandidates].some((candidate) => candidate.id === candidateId)
@@ -115,12 +116,9 @@ resolver.define('reviewDecision', async ({ payload, context }) => {
   try {
     const finding = await canReviewFinding({ projectKey, candidateId, issueKey: payload?.issueKey, cloudId: context.cloudId });
     if (!finding.ok) return finding;
-    const review = {
-      status: choice,
-      reviewedAt: new Date().toISOString()
-    };
+    const review = newReview(projectKey, context.accountId, choice);
     await storage.set(reviewKey(projectKey, candidateId), review);
-    return { ok: true, review };
+    return { ok: true, review: reviewForViewer(review, projectKey, context.accountId) };
   } catch (error) {
     console.error('Decision Drift Radar review update failed', error);
     return { ok: false, error: 'Could not save this review. Check app permissions and try again.' };
@@ -381,7 +379,7 @@ resolver.define('getAiJob', async ({ payload, context }) => {
     if (job.state !== 'done') return { ok: false, error: 'No AI pass has run for this project yet.' };
     const scanned = await scanProject(projectKey, { cloudId: context?.cloudId });
     if (!scanned.ok) return { ok: false, error: scanned.error };
-    const { candidates } = await attachReviewState(projectKey, scanned.aiCandidates);
+    const { candidates } = await attachReviewState(projectKey, scanned.aiCandidates, context?.accountId);
     const fresh = new Set(job.findingIds ?? []);
     return {
       ok: true,

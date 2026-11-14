@@ -280,6 +280,12 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
   // Sample reviews live only in this page's memory: they are never saved.
   const [sampleReview, setSampleReview] = useState(null);
   const review = sample ? sampleReview : candidate.review;
+  const affectedIssues = candidate.affectedIssues.filter(({ drift }) => drift?.status !== 'resolved');
+  const resolvedIssues = [
+    ...candidate.affectedIssues.filter(({ drift }) => drift?.status === 'resolved')
+      .map(({ issueKey, drift }) => ({ issueKey, drift, stillMatches: true })),
+    ...(candidate.resolvedIssues ?? []).map((drift) => ({ issueKey: drift.issueKey, drift }))
+  ];
   const canNote = (sample ? Boolean(onPreviewNote) : Boolean(onApplyNote)) && review?.status === 'relevant';
   const reviewWith = sample
     ? (choice) => setSampleReview(choice === 'reset' ? null : { status: choice, reviewedAt: null })
@@ -310,7 +316,7 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
             <Lozenge appearance={review.status === 'relevant' ? 'success' : 'removed'}>
               {review.status === 'relevant' ? 'Marked relevant' : 'Dismissed'}
             </Lozenge>
-            <Text>{sample ? 'Sample only: not saved' : `Reviewed ${review.reviewedAt ? new Date(review.reviewedAt).toLocaleDateString() : ''}`}</Text>
+            <Text>{sample ? 'Sample only: not saved' : `Reviewed${review.reviewer ? ` by ${review.reviewer}` : ''}${review.reviewedAt ? ` on ${shortDate(review.reviewedAt)}` : ''}`}</Text>
           </Inline>
         ) : <Text>{sample ? 'Sample: try the review a teammate would do. Nothing is saved.' : 'Needs teammate review'}</Text>}
         {reviewWith && (
@@ -333,10 +339,10 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
         )}
       </Stack>
 
-      {candidate.affectedIssues.length > 0 ? (
+      {affectedIssues.length > 0 && (
         <Stack space="space.050">
           {!hideIssueKeys && <Text><Strong>May affect</Strong></Text>}
-          {candidate.affectedIssues.map((affected) => (
+          {affectedIssues.map((affected) => (
             <Stack key={affected.issueKey} space="space.025">
               <Inline space="space.100" alignBlock="center">
                 <Text>
@@ -366,18 +372,30 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
             </Stack>
           ))}
         </Stack>
-      ) : (
+      )}
+      {affectedIssues.length === 0 && resolvedIssues.length === 0 && (
         <Text>No Jira issue in this project clearly points at this. Review it manually.</Text>
       )}
-      {(candidate.resolvedIssues ?? []).length > 0 && (
+      {resolvedIssues.length > 0 && (
         <Stack space="space.050">
           <Text><Strong>Resolved since it was found</Strong></Text>
-          {candidate.resolvedIssues.map((resolved) => {
-            const href = sample ? null : siteLink(siteUrl, issueUrls[resolved.issueKey] ?? `/browse/${resolved.issueKey}`);
+          {resolvedIssues.map(({ issueKey, drift, stillMatches }) => {
+            const href = sample ? null : siteLink(siteUrl, issueUrls[issueKey] ?? `/browse/${issueKey}`);
             return (
-              <Stack key={resolved.issueKey} space="space.025">
-                <Text>{href ? <Link href={href}>{resolved.issueKey}</Link> : resolved.issueKey}</Text>
-                <DriftLine drift={resolved} />
+              <Stack key={issueKey} space="space.025">
+                {!hideIssueKeys && <Text>{href ? <Link href={href}>{issueKey}</Link> : issueKey}</Text>}
+                <DriftLine drift={drift} />
+                {((stillMatches && canNote) || candidate.notes?.[issueKey]) && (
+                  <NoteAction
+                    candidate={candidate}
+                    issueKey={issueKey}
+                    siteUrl={siteUrl}
+                    onApplyNote={onApplyNote}
+                    onPreviewNote={onPreviewNote}
+                    onDraftNote={onDraftNote}
+                    sample={sample}
+                  />
+                )}
               </Stack>
             );
           })}
