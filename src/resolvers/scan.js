@@ -37,7 +37,10 @@ export async function searchDecisionPages(projectKey) {
     return { pages: [], warnings: [safeError(response.status, 'Confluence source search')] };
   }
   const data = await response.json();
-  return { pages: (data.results ?? []).map((page) => pageSource(page, projectKey)), warnings: [] };
+  return {
+    pages: (data.results ?? []).map((page) => pageSource(page, projectKey)), warnings: [],
+    morePages: Boolean(data._links?.next)
+  };
 }
 
 /** Runs the domain module and keeps only what callers need. */
@@ -54,10 +57,10 @@ export function analyze(sources, issues) {
  * the already started key search, so it runs alongside the Jira reads.
  */
 async function projectPages(projectKey, projectId, cloudId, keySearch, deadline) {
-  const { pages, warnings } = await keySearch;
+  const { pages, warnings, morePages = false } = await keySearch;
   const knownPageIds = pages.map((page) => page.id.replace(/^page-/, ''));
   const { pages: graphPages, summary } = await discoverViaGraph({ projectKey, projectId, cloudId, knownPageIds, deadline });
-  return { pages: [...pages, ...graphPages], warnings, graph: summary };
+  return { pages: [...pages, ...graphPages], warnings, graph: summary, morePages };
 }
 
 /** The 50 most recently updated issues of a project, read through search. */
@@ -67,7 +70,9 @@ async function searchProjectIssues(projectKey) {
     route`/rest/api/3/search/jql?jql=${jql}&maxResults=${MAX_ISSUES}&fields=${ISSUE_FIELDS}`
   );
   if (!response.ok) return { ok: false, status: response.status };
-  return { ok: true, rawIssues: (await response.json()).issues ?? [] };
+  const body = await response.json();
+  // Enhanced search pages with a token instead of a total; either signal means older issues exist.
+  return { ok: true, rawIssues: body.issues ?? [], moreIssues: body.isLast === false || Boolean(body.nextPageToken) };
 }
 
 /** Up to three visible projects whose name or key resembles `text`, as "Name (KEY)". */
@@ -125,7 +130,7 @@ export async function scanProject(projectKey, { cloudId } = {}) {
     }
     return { ok: false, error: safeError(searched.status, 'Jira') };
   }
-  const { rawIssues } = searched;
+  const { rawIssues, moreIssues = false } = searched;
   // An old project key can still find the renamed project's issues; keep its history under one key.
   const actualProjectKey = rawIssues[0]?.fields?.project?.key;
   if (actualProjectKey && actualProjectKey !== projectKey) {
@@ -142,7 +147,7 @@ export async function scanProject(projectKey, { cloudId } = {}) {
     }
     projectId = project.id;
   }
-  const { pages, warnings, graph } = await projectPages(projectKey, projectId, cloudId, keySearch, deadline);
+  const { pages, warnings, graph, morePages } = await projectPages(projectKey, projectId, cloudId, keySearch, deadline);
 
   const sources = [...pages, ...rawIssues.flatMap((issue) => issueSources(issue, projectKey))];
   const issueRecords = rawIssues.map((issue) => toIssueRecord(issue, projectKey));
@@ -150,7 +155,7 @@ export async function scanProject(projectKey, { cloudId } = {}) {
   const ai = await savedAiCandidates({ projectKey, sources, issues: issueRecords, known: candidates });
   return {
     ok: true, rawIssues, pages, warnings, candidates, notice, sources, issueRecords, graph, readAt,
-    aiCandidates: ai.candidates, aiSavedAt: ai.savedAt
+    aiCandidates: ai.candidates, aiSavedAt: ai.savedAt, coverage: { moreIssues, morePages: Boolean(morePages), pageLimit: MAX_PAGES }
   };
 }
 

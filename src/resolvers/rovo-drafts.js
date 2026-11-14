@@ -1,8 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { storage } from '@forge/api';
 import { kvs } from '@forge/kvs';
 import { resolveFindingForIssue } from './scan';
-import { composeNote, defaultNoteText, noteKey, noteProblem, postNote, reviewKey } from './notes';
+import { canChangeReviews, composeNote, defaultNoteText, NO_REVIEW_PERMISSION, noteKey, noteProblem, postNote, reviewerHash, reviewKey } from './notes';
 
 const DRAFT_MINUTES = 10;
 const draftKey = (accountId, issueKey) =>
@@ -18,8 +17,8 @@ export async function prepareRovoDraft({ accountId, projectKey, issueKey, candid
   if (!finding.ok) return finding;
   const { candidate, issue } = finding;
   const [review, posted] = await Promise.all([
-    storage.get(reviewKey(projectKey, candidateId)),
-    storage.get(noteKey(projectKey, candidateId, issueKey))
+    kvs.get(reviewKey(projectKey, candidateId)),
+    kvs.get(noteKey(projectKey, candidateId, issueKey))
   ]);
   if (review?.status === 'dismissed') return { ok: false, error: 'A teammate dismissed this finding. Undo the review in Jira to prepare a note.' };
   if (posted) return { ok: false, error: `A note for this finding was already posted to ${issueKey}.` };
@@ -64,9 +63,9 @@ async function currentDraft({ issueKey, siteUrl, cloudId }, draft) {
   if (composed.digest !== draft.digest) {
     return { ok: false, error: 'Who can see the decision\'s source, or the source itself, changed after the draft was prepared. Prepare a new note in chat.' };
   }
-  const review = await storage.get(reviewKey(draft.projectKey, draft.candidateId));
+  const review = await kvs.get(reviewKey(draft.projectKey, draft.candidateId));
   if (review?.status === 'dismissed') return { ok: false, error: 'A teammate dismissed this finding. The note was not posted.' };
-  const posted = await storage.get(noteKey(draft.projectKey, draft.candidateId, issueKey));
+  const posted = await kvs.get(noteKey(draft.projectKey, draft.candidateId, issueKey));
   if (posted) return { ok: false, error: 'A note for this finding has already been posted.' };
   return { ok: true, draft, composed };
 }
@@ -96,14 +95,16 @@ export async function confirmRovoDraft(input, id, digest) {
   if (!digest || digest !== current.composed.digest) {
     return { ok: false, error: 'The comment changed since you loaded the preview, so nothing was posted. Load the draft again.' };
   }
+  // Posting a draft also records a relevant review, which everyone in the project sees.
+  if (!(await canChangeReviews(draft.projectKey, issueKey))) return { ok: false, error: NO_REVIEW_PERMISSION };
   const posted = await postNote({ ...draft, body: current.composed.body, confirmedIn: 'rovo' });
   if (!posted.ok) return posted;
 
   let warning = posted.warning;
   const review = reviewKey(draft.projectKey, draft.candidateId);
   try {
-    if (!(await storage.get(review))) {
-      await storage.set(review, { status: 'relevant', reviewedAt: new Date().toISOString(), via: 'rovo' });
+    if (!(await kvs.get(review))) {
+      await kvs.set(review, { status: 'relevant', reviewedAt: new Date().toISOString(), via: 'rovo', reviewer: reviewerHash(accountId) });
     }
   } catch {
     warning ??= 'The comment was posted, but the review record could not be updated.';

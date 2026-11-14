@@ -3,14 +3,14 @@
  * the app's resolvers and the Rovo agent's actions so both enforce the same rules.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import api, { route, startsWith, storage } from '@forge/api';
-import { Filter, FilterConditions, kvs } from '@forge/kvs';
+import api, { route } from '@forge/api';
+import { Filter, FilterConditions, kvs, WhereConditions } from '@forge/kvs';
 import { GENERIC_NOTE, noteComment } from './normalize';
 
 export const MAX_NOTE_LENGTH = 2000;
 export const MAX_QUOTE_LENGTH = 320;
 const MAX_TITLE_LENGTH = 255;
-// Forge storage returns at most 20 entries per query page.
+// Kept at the legacy storage page size of 20 entries per query page.
 const REVIEW_PAGE_SIZE = 20;
 const MAX_REVIEW_PAGES = 50;
 
@@ -39,6 +39,38 @@ export function validReviewTarget(projectKey, candidateId) {
 export async function canAccessProject(projectKey) {
   const response = await api.asUser().requestJira(route`/rest/api/3/project/${projectKey}`);
   return response.ok;
+}
+
+export const NO_REVIEW_PERMISSION = 'Reviews apply to everyone in this project, so they need permission to add comments or edit issues here. Ask a project admin, or a teammate who can comment, to review it.';
+
+/**
+ * Reviews change what the whole project sees, so they need more than read access: the person must
+ * be able to browse and either comment on or edit issues. Checked on the issue when one is named
+ * (issue security can narrow the project's permissions), otherwise on the project.
+ */
+export async function canChangeReviews(projectKey, issueKey = null) {
+  const permissions = 'BROWSE_PROJECTS,ADD_COMMENTS,EDIT_ISSUES';
+  const path = issueKey
+    ? route`/rest/api/3/mypermissions?issueKey=${issueKey}&permissions=${permissions}`
+    : route`/rest/api/3/mypermissions?projectKey=${projectKey}&permissions=${permissions}`;
+  const response = await api.asUser().requestJira(path);
+  if (!response.ok) return false;
+  const granted = (await response.json())?.permissions;
+  return granted?.BROWSE_PROJECTS?.havePermission === true
+    && (granted?.ADD_COMMENTS?.havePermission === true || granted?.EDIT_ISSUES?.havePermission === true);
+}
+
+/** Who reviewed, kept only as a hash so storage never holds an account id. */
+export function reviewerHash(accountId) {
+  return accountId ? createHash('sha256').update(`reviewer:${accountId}`).digest('hex') : null;
+}
+
+/** A stored review as one viewer sees it: "you", "a teammate", or unknown for older records. */
+export function presentReview(review, viewerAccountId) {
+  if (!review) return null;
+  const { reviewer, ...rest } = review;
+  const reviewedBy = !reviewer ? null : reviewer === reviewerHash(viewerAccountId) ? 'you' : 'teammate';
+  return { ...rest, reviewedBy };
 }
 
 /** A link on this site to a Confluence page or Jira issue; anything else is dropped. */
@@ -181,7 +213,7 @@ function uncertainNote(issueKey) {
 
 async function saveNoteReceipt(key, lockKey, attemptId, record) {
   try {
-    await storage.set(key, record);
+    await kvs.set(key, record);
   } catch {
     // Keep the reservation. A retry can recover the comment using its Jira property.
     return { ok: true, note: record, warning: `The comment was added to ${record.issueKey}, but the app could not record it yet.` };
@@ -248,7 +280,7 @@ async function recoverNote(key, lockKey, issueKey, attempt) {
     }
 
     if (Date.now() - startedAt >= RECOVERY_GRACE_MS && coversAttempt && allChecked) {
-      const receipt = await storage.get(key);
+      const receipt = await kvs.get(key);
       if (receipt) return { ok: true, note: receipt, alreadyApplied: true };
       // A conditional delete cannot remove a newer reservation or leave a stale cleanup claim.
       await releaseReservation(lockKey, attempt.attemptId);
@@ -264,14 +296,14 @@ async function recoverNote(key, lockKey, issueKey, attempt) {
 export async function postNote({ projectKey, candidateId, issueKey, body, confirmedIn }) {
   const key = noteKey(projectKey, candidateId, issueKey);
   const lockKey = `posting:${key}`;
-  const existing = await storage.get(key);
+  const existing = await kvs.get(key);
   if (existing) return { ok: true, note: existing, alreadyApplied: true };
 
   const attempt = { attemptId: randomUUID(), startedAt: new Date().toISOString(), ...(confirmedIn ? { confirmedIn } : {}) };
   try {
     await reservations.set(lockKey, attempt, { keyPolicy: 'FAIL_IF_EXISTS' });
   } catch {
-    const receipt = await storage.get(key);
+    const receipt = await kvs.get(key);
     if (receipt) return { ok: true, note: receipt, alreadyApplied: true };
     const prior = await reservations.get(lockKey);
     return prior
@@ -282,7 +314,7 @@ export async function postNote({ projectKey, candidateId, issueKey, body, confir
   // Another request may have saved the receipt and released its reservation since our first read.
   let receipt;
   try {
-    receipt = await storage.get(key);
+    receipt = await kvs.get(key);
   } catch {
     await releaseReservation(lockKey, attempt.attemptId).catch(() => {});
     return { ok: false, error: 'The app could not check earlier comments. Nothing was posted. Try again.' };
@@ -323,7 +355,7 @@ async function loadByPrefix(prefix) {
   const entries = new Map();
   let cursor;
   for (let page = 0; page < MAX_REVIEW_PAGES; page++) {
-    let query = storage.query().where('key', startsWith(prefix)).limit(REVIEW_PAGE_SIZE);
+    let query = kvs.query().where('key', WhereConditions.beginsWith(prefix)).limit(REVIEW_PAGE_SIZE);
     if (cursor) query = query.cursor(cursor);
     const { results, nextCursor } = await query.getMany();
     for (const { key, value } of results ?? []) entries.set(key.slice(prefix.length), value);
@@ -343,7 +375,7 @@ function visibleNotes(candidate, notes) {
 }
 
 /** Adds each finding's saved review and the notes already posted to Jira for it. */
-export async function attachReviewState(projectKey, candidates) {
+export async function attachReviewState(projectKey, candidates, viewerAccountId = null) {
   if (candidates.length === 0) return { candidates, reviewWarning: null };
   try {
     const [reviews, notes] = await Promise.all([loadByPrefix(reviewPrefix(projectKey)), loadByPrefix(notePrefix(projectKey))]);
@@ -359,7 +391,7 @@ export async function attachReviewState(projectKey, candidates) {
     return {
       candidates: candidates.map((candidate) => ({
         ...candidate,
-        review: reviews.entries.get(candidate.id) ?? null,
+        review: presentReview(reviews.entries.get(candidate.id), viewerAccountId),
         notes: visibleNotes(candidate, notesByCandidate.get(candidate.id))
       })),
       reviewWarning: complete ? null : 'Some older reviews could not be loaded for this project.'

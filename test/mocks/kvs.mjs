@@ -19,6 +19,7 @@ export class Filter {
 }
 
 export const FilterConditions = { equalTo: (value) => value };
+export const WhereConditions = { beginsWith: (value) => ({ condition: 'BEGINS_WITH', value }) };
 
 const conditionHolds = (key, conditions) => {
   if (!conditions) return true;
@@ -42,6 +43,24 @@ export const kvs = {
     kvsMemory.delete(key);
   },
   entity: () => kvs,
+  /** Prefix queries over plain keys, paged like the real API (at most 100 per page here). */
+  query() {
+    const q = { prefix: '', limit: 10, cursor: 0 };
+    const builder = {
+      where(_field, condition) {
+        if (condition?.condition !== 'BEGINS_WITH') throw new Error('use WhereConditions.beginsWith');
+        q.prefix = condition.value; return builder;
+      },
+      limit(n) { if (n > 100) throw new Error('KVS pages hold at most 100 entries'); q.limit = n; return builder; },
+      cursor(c) { q.cursor = Number(c); return builder; },
+      async getMany() {
+        const all = [...kvsMemory.entries()].filter(([key]) => key.startsWith(q.prefix)).sort();
+        const page = all.slice(q.cursor, q.cursor + q.limit).map(([key, value]) => ({ key, value: structuredClone(value) }));
+        return { results: page, nextCursor: q.cursor + q.limit < all.length ? String(q.cursor + q.limit) : undefined };
+      }
+    };
+    return builder;
+  },
   /** Conditional sets and deletes, applied together only if every condition holds. */
   transact() {
     const ops = [];

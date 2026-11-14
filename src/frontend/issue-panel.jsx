@@ -47,7 +47,13 @@ function IssuePanel() {
     return () => { cancelled = true; };
   }, [issueKey]);
 
-  const candidates = result?.candidates ?? [];
+  // A follow-up comment never names its decision, so put the decision it came from first and say so.
+  const postedHere = (candidate) => (candidate.notes?.[issueKey]?.commentId ? candidate.notes[issueKey] : null);
+  const candidates = [...(result?.candidates ?? [])].sort((a, b) => {
+    const pa = postedHere(a); const pb = postedHere(b);
+    if (Boolean(pa) !== Boolean(pb)) return pa ? -1 : 1;
+    return String(pb?.appliedAt ?? '').localeCompare(String(pa?.appliedAt ?? ''));
+  });
 
   const reviewCandidate = async (candidate, choice) => {
     setReviewBusyId(candidate.id);
@@ -167,6 +173,7 @@ function IssuePanel() {
           candidate={candidate}
           siteUrl={context?.siteUrl}
           hideIssueKeys
+          followUpHere={postedHere(candidate)}
           onReview={(choice) => reviewCandidate(candidate, choice)}
           reviewBusy={reviewBusyId === candidate.id}
           onApplyNote={(noteIssueKey, note, digest) => applyNote(candidate, noteIssueKey, note, digest)}

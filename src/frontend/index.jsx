@@ -253,6 +253,16 @@ function App() {
             Scanned {result.issues.length} {result.sample ? 'sample' : `recent ${result.projectKey}`} issues and {result.pages?.length ?? 0}
             {result.sample ? ' sample' : ''} Confluence{result.pages?.length === 1 ? ' page' : ' pages'}.
           </Text>
+          {(result.coverage?.moreIssues || result.coverage?.morePages) && (
+            <Text>
+              <Em>
+                {'Partial coverage: '}
+                {result.coverage.moreIssues ? `${result.projectKey} has more issues; only the ${result.issues.length} most recently updated were checked. ` : ''}
+                {result.coverage.morePages ? `More Confluence pages mention ${result.projectKey} than the ${result.coverage.pageLimit} most recently edited that a scan reads. ` : ''}
+                Drift on older items is not shown.
+              </Em>
+            </Text>
+          )}
           {result.radar && (
             <SectionMessage appearance="information" title="Radar">
               {`${result.radar.findings} ${result.radar.findings === 1 ? 'finding' : 'findings'}`}
