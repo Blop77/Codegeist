@@ -97,6 +97,8 @@ You should see:
 
 **5. Post a follow-up.** Under `KEY-1`, select **Add note to KEY-1**. Because this decision comes from a Confluence page, the app shows a **Comment preview** with the fixed follow-up and the reason: "The decision comes from a Confluence page. The app cannot check that everyone who can see this Jira issue may also read that page, so the comment does not quote it, name it or link to it." There is no note to edit and no **Draft with AI** for this source. Select **Post follow-up to KEY-1**. The card shows "Note added to KEY-1" with a **View comment** link. The comment on the issue is in your name and contains exactly the previewed text, with no quote, page title or link.
 
+Open **Decision Drift Radar** on the issue to find the matching card. Findings with a follow-up on that issue appear first, newest posted comment first. Each is labelled **Follow-up posted on this issue** with a **View comment** link to identify the exact Jira comment. The panel can only show findings your account can access.
+
 The server builds the comment, and posts it only if it is still exactly the preview you confirmed. If the source or who can see it changed in between, nothing is posted and the new preview is shown.
 
 *To see a quoted note:* add a comment to `KEY-1` reading `Decision: we agreed the launch email uses the shared plan instead of separate channel plans.`, scan again, mark that finding relevant, and select **Add note to KEY-1**. A decision in a Jira comment in the same project, with no issue security level or comment restriction, is visible to everyone who can see the issue, so you can edit the note (or select **Draft with AI**), select **Preview comment**, and post a comment that includes your note, the quoted decision and a link to the comment.

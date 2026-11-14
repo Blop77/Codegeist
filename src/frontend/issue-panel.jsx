@@ -12,6 +12,7 @@ import ForgeReconciler, {
 } from '@forge/react';
 import { invoke } from '@forge/bridge';
 import { CandidateCard, CommentPreview, draftPayload, notePayload, siteLink, withNote } from './candidate-card';
+import { orderIssueFindings } from './issue-follow-up';
 
 function IssuePanel() {
   const context = useProductContext();
@@ -47,7 +48,7 @@ function IssuePanel() {
     return () => { cancelled = true; };
   }, [issueKey]);
 
-  const candidates = result?.candidates ?? [];
+  const candidates = orderIssueFindings(result?.candidates ?? [], issueKey);
 
   const reviewCandidate = async (candidate, choice) => {
     setReviewBusyId(candidate.id);
@@ -167,6 +168,7 @@ function IssuePanel() {
           candidate={candidate}
           siteUrl={context?.siteUrl}
           hideIssueKeys
+          followUp={candidate.notes?.[issueKey]}
           onReview={(choice) => reviewCandidate(candidate, choice)}
           reviewBusy={reviewBusyId === candidate.id}
           onApplyNote={(noteIssueKey, note, digest) => applyNote(candidate, noteIssueKey, note, digest)}

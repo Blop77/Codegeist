@@ -226,3 +226,39 @@ test('saved note records are shown only for issues in the viewer’s own scan', 
   const rovo = await actions.findIssueDecisions({ issueKey: 'QA-14', context: { cloudId: 'cloud-1' } });
   assert.doesNotMatch(JSON.stringify(rovo), /QA-99|7002/, 'Rovo results do not name the hidden issue or its comment');
 });
+
+test('issue panel orders visible follow-ups first and leaves unrelated cards in scan order', async () => {
+  const { orderIssueFindings } = await import('../src/frontend/issue-follow-up.js');
+  const receipt = (issueKey: string, appliedAt?: string) => ({ issueKey, commentId: '7001', appliedAt });
+  const candidates = [
+    { id: 'plain', notes: {} },
+    { id: 'other-issue', notes: { 'QA-99': receipt('QA-99', '2026-11-14T10:00:00Z') } },
+    { id: 'older', notes: { 'QA-14': receipt('QA-14', '2026-11-12T10:00:00Z') } },
+    { id: 'undated', notes: { 'QA-14': receipt('QA-14') } },
+    { id: 'newest', notes: { 'QA-14': receipt('QA-14', '2026-11-13T10:00:00Z') } }
+  ];
+  assert.deepEqual(orderIssueFindings(candidates, 'QA-14').map((c) => c.id),
+    ['newest', 'older', 'undated', 'plain', 'other-issue']);
+  assert.equal(candidates[0].id, 'plain', 'keeps the original scan result intact');
+
+  const payload = { issueKey: 'QA-14' };
+  const panel = await handler.getIssueDecisionContext({ payload, context: ctx });
+  const thursday = panel.candidates.find((c: any) => c.summary.includes('Thursdays'));
+  assert.ok(thursday);
+  const noteKeys = ['QA-14', 'QA-99'].map((issueKey) => `note:QA:${thursday.id}:${issueKey}`);
+  const previous = noteKeys.map((key) => memory.get(key));
+  memory.set(noteKeys[0], receipt('QA-14'));
+  memory.set(noteKeys[1], receipt('QA-99'));
+  try {
+    const refreshed = await handler.getIssueDecisionContext({ payload, context: ctx });
+    const first = orderIssueFindings(refreshed.candidates, 'QA-14')[0];
+    assert.equal(first.id, thursday.id);
+    assert.equal(first.notes['QA-14'].commentId, '7001');
+    assert.equal(first.notes['QA-99'], undefined);
+  } finally {
+    noteKeys.forEach((key, index) => {
+      if (previous[index] === undefined) memory.delete(key);
+      else memory.set(key, previous[index]);
+    });
+  }
+});

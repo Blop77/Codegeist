@@ -95,7 +95,7 @@ export function CommentPreview({ preview, title = 'Comment preview: exactly what
  * issue's audience, the comment is a fixed follow-up and there is no note to edit. In the sample,
  * the preview is built from bundled data and nothing can be posted.
  */
-function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onPreviewNote, onDraftNote, sample = false }) {
+function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onPreviewNote, onDraftNote, sample = false, showReceipt = true }) {
   const [draft, setDraft] = useState(null);
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -105,13 +105,16 @@ function NoteAction({ candidate, issueKey, siteUrl, onApplyNote, onPreviewNote, 
   const applied = candidate.notes?.[issueKey];
 
   if (applied) {
+    if (!showReceipt && !message) return null;
     const href = applied.commentId ? siteLink(siteUrl, `/browse/${issueKey}?focusedCommentId=${applied.commentId}`) : null;
     return (
       <Stack space="space.050">
-        <Text>
-          Note added to {issueKey}{applied.appliedAt ? ` on ${new Date(applied.appliedAt).toLocaleDateString()}` : ''}
-          {href ? <>{' · '}<Link href={href}>View comment</Link></> : null}
-        </Text>
+        {showReceipt && (
+          <Text>
+            Note added to {issueKey}{applied.appliedAt ? ` on ${new Date(applied.appliedAt).toLocaleDateString()}` : ''}
+            {href ? <>{' · '}<Link href={href}>View comment</Link></> : null}
+          </Text>
+        )}
         {message && <SectionMessage appearance="warning">{message}</SectionMessage>}
       </Stack>
     );
@@ -273,10 +276,13 @@ function DriftLine({ drift }) {
   return <Text><Em>Drifting since {shortDate(drift.firstSeenAt)}: the issue still says “{drift.phrase}”.</Em></Text>;
 }
 
-export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, onReview, reviewBusy = false, onApplyNote, onPreviewNote, onDraftNote, sample = false }) {
+export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKeys = false, followUp, onReview, reviewBusy = false, onApplyNote, onPreviewNote, onDraftNote, sample = false }) {
   const kind = KIND_LABEL[candidate.kind] ?? KIND_LABEL.proposal;
   const { source } = candidate;
   const sourceHref = siteLink(siteUrl, source.url);
+  const followUpHref = followUp?.commentId
+    ? siteLink(siteUrl, `/browse/${followUp.issueKey}?focusedCommentId=${followUp.commentId}`)
+    : null;
   // Sample reviews live only in this page's memory: they are never saved.
   const [sampleReview, setSampleReview] = useState(null);
   const review = sample ? sampleReview : candidate.review;
@@ -293,6 +299,13 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
         {candidate.isNew && <Lozenge appearance="inprogress">New since your last visit</Lozenge>}
         <Text>{sourceHref ? <Link href={sourceHref}>{source.title || 'Source'}</Link> : source.title}</Text>
       </Inline>
+      {followUp?.commentId && (
+        <Text>
+          <Strong>Follow-up posted on this issue</Strong>
+          {followUp.appliedAt ? ` · ${shortDate(followUp.appliedAt)}` : ''}
+          {followUpHref && <>{' · '}<Link href={followUpHref}>View comment</Link></>}
+        </Text>
+      )}
       <Text><Strong>{candidate.summary}</Strong></Text>
       <Text><Em>“{candidate.evidence.quote}”</Em></Text>
       <Text>{sourceMeta(source)}</Text>
@@ -361,6 +374,7 @@ export function CandidateCard({ candidate, siteUrl, issueUrls = {}, hideIssueKey
                   onPreviewNote={onPreviewNote}
                   onDraftNote={onDraftNote}
                   sample={sample}
+                  showReceipt={!(followUp?.commentId && followUp.issueKey === affected.issueKey)}
                 />
               )}
             </Stack>
