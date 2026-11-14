@@ -25,6 +25,8 @@ How to install Decision Drift Radar on your own Atlassian site and see it workin
 
 The app calls no external services, and all data stays in Atlassian. The optional AI pass uses a model hosted by Atlassian (Forge LLMs), and runs only when you select **Find more with AI**. Because it is an AI feature, Atlassian shows it on the install screen and asks site admins to approve it.
 
+**What Radar detects.** Radar works best with explicit decision wording such as “Decision:”, “we agreed” or “we decided”. To flag an issue that still uses old wording, the decision has to name what it replaces, for example “X instead of Y” or “move from X to Y”. The optional AI pass can surface indirectly worded decisions for teammate review: its exact quote shows the text is in the source, and a teammate still judges whether it records a decision.
+
 ## Part 1: see it in one minute (sample data, no setup)
 
 **Start here.** Everything in this part is fictional sample data, labelled as sample in the app. It is not a result from your site. The app must be installed first (see **Install**).
